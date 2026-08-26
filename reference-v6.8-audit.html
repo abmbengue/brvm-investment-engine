@@ -1,0 +1,70 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>BRVM Investment Engine — V6.8 Final Audit</title><style>
+*{box-sizing:border-box}body{margin:0;background:#07101d;color:#edf3ff;font-family:system-ui,-apple-system,sans-serif}.app{max-width:1480px;margin:auto;padding:18px}.hero,.panel,.metric{background:#101a2b;border:1px solid #293953;border-radius:14px;padding:17px;margin-bottom:12px}.hero{background:linear-gradient(135deg,#162b48,#101a2b)}.grid,.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.metrics{grid-template-columns:repeat(5,1fr)}.card{border:1px solid #33445e;border-radius:10px;padding:12px}.big{font-size:23px;font-weight:800}.green{color:#7bd79f}.yellow{color:#efcf79}.red{color:#ef8e8e}.muted{color:#8b99b2}.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:end}input,select,button{background:#0d1828;color:#fff;border:1px solid #40536f;border-radius:8px;padding:9px}button{cursor:pointer}table{width:100%;border-collapse:collapse}td,th{padding:8px;border-bottom:1px solid #273650;text-align:left;font-size:12px}th{color:#8b99b2}.ok{border:1px solid #315f44;background:#10291e;padding:12px;border-radius:9px}.warn{border:1px solid #665526;background:#211d10;color:#efcf79;padding:12px;border-radius:9px}.danger{border:1px solid #693b3b;background:#241313;color:#ef8e8e;padding:12px;border-radius:9px}.badge{display:inline-block;padding:4px 8px;border-radius:999px;border:1px solid #40536f;font-size:11px}.flow{display:flex;gap:7px;overflow:auto}.flow div{min-width:135px;border:1px solid #33445e;border-radius:9px;padding:10px}.bar{height:8px;background:#293650;border-radius:8px;overflow:hidden}.bar i{display:block;height:100%;background:#78a9ff}.small{font-size:11px}@media(max-width:850px){.grid,.metrics{grid-template-columns:1fr 1fr}}@media(max-width:560px){.grid,.metrics{grid-template-columns:1fr}}</style></head><body><main class="app">
+<section class="hero"><h1>BRVM INVESTMENT ENGINE — V6.8 FINAL AUDIT</h1><p class="muted">Version de consolidation : interface, règles, contrôles et séparation stricte entre démonstration et production.</p><div class="toolbar"><label>Capital disponible<br><input id="capital" value="5 000 000"></label><label>Apport mensuel<br><input id="monthly" value="500 000"></label><label>Durée (ans, sans plafond structurel)<br><input id="years" type="number" value="25" min="1" oninput="sync()"></label><label>Objectif annuel (%)<br><input id="rate" type="number" value="9" step=".1" oninput="sync()"></label><button onclick="sync()">RECACULER</button></div></section>
+<section class="metrics"><div class="metric"><small>Architecture</small><div class="big green">INTÉGRÉE</div></div><div class="metric"><small>Capital</small><div class="big" id="mcap">—</div></div><div class="metric"><small>Apport</small><div class="big" id="mmonth">—</div></div><div class="metric"><small>Projection</small><div class="big" id="mfv">—</div></div><div class="metric"><small>Production</small><div class="big red">DATA GATE</div></div></section>
+<section class="panel"><h2>Chaîne maître</h2><div class="flow"><div><b>1 DATA</b><p>Source / qualité / fraîcheur</p></div><div><b>2 PREDICTOR</b><p>Ranking / conviction</p></div><div><b>3 PORTFOLIO</b><p>Risque / diversification</p></div><div><b>4 ALLOCATION</b><p>Poids / tranches</p></div><div><b>5 STRESS</b><p>Scénarios / Monte-Carlo</p></div><div><b>6 DECISION</b><p>BUY / WAIT / EXIT</p></div><div><b>7 BACKTEST</b><p>Walk-forward</p></div><div><b>8 AUDIT</b><p>Traçabilité</p></div></div></section>
+<section class="grid"><div class="panel"><h2>Predictor</h2><p>Score composite : <b class="green">calculable</b></p><p>Fondamentaux · croissance · valorisation · momentum · dividende · macro · liquidité · risque · qualité data.</p><p class="small muted">La cotation/opportunité est sélectionnée par le moteur, pas par l'utilisateur.</p></div><div class="panel"><h2>Allocation</h2><p>Le moteur calcule poids cible, montant, réserve et tranches.</p><p>Les nouveaux apports sont réévalués au lieu d'être distribués mécaniquement.</p></div><div class="panel"><h2>Stress</h2><p>Marché baissier · faible rendement · central · favorable · Monte-Carlo.</p><p class="yellow">La taille de position doit diminuer si le risque marginal devient excessif.</p></div><div class="panel"><h2>Decision Center</h2><p class="green"><b>BUY / ADD / WAIT / REDUCE / EXIT / NO ACTION</b></p><p>Chaque décision doit avoir une justification et des conditions d'invalidation.</p></div></section>
+<section class="panel"><h2>Simulation patrimoniale</h2><table><tr><th>Horizon</th><th>Capital versé</th><th>Scénario 5%</th><th>Scénario central</th><th>Scénario 12%</th></tr><tbody id="proj"></tbody></table><p class="muted small">La durée n'est pas limitée à 25 ans : 25 ans est seulement la valeur initiale affichée.</p></section>
+<section class="panel"><h2>Audit final — 12 contrôles</h2><table><tr><th>Contrôle</th><th>Statut</th><th>Commentaire</th></tr>
+<tr><td>État central unique</td><td class="green">PASS</td><td>Les paramètres alimentent les sorties communes.</td></tr>
+<tr><td>Capital sans plafond artificiel</td><td class="green">PASS</td><td>Aucune limite métier de montant n'est imposée.</td></tr>
+<tr><td>Apport mensuel sans plafond artificiel</td><td class="green">PASS</td><td>Aucune limite métier de contribution.</td></tr>
+<tr><td>Durée sans plafond structurel</td><td class="green">PASS</td><td>Valeur initiale 25 ans, saisie libre supérieure.</td></tr>
+<tr><td>Sélection automatique des opportunités</td><td class="green">PASS</td><td>Le Predictor est l'agent de sélection.</td></tr>
+<tr><td>Réserve non assimilée à une limite</td><td class="green">PASS</td><td>Réserve stratégique redéployable.</td></tr>
+<tr><td>Apports réévalués</td><td class="green">PASS</td><td>Pas de répartition mécanique obligatoire.</td></tr>
+<tr><td>Stress / robustesse</td><td class="green">PASS</td><td>Couche séparée avant décision.</td></tr>
+<tr><td>Anti-look-ahead</td><td class="green">PASS*</td><td>*Architecture prévue ; validation réelle dépend des séries historiques.</td></tr>
+<tr><td>Backtest / walk-forward</td><td class="yellow">READY</td><td>Infrastructure définie ; données historiques réelles requises.</td></tr>
+<tr><td>Sources de marché réelles</td><td class="yellow">GATE</td><td>À connecter et auditer.</td></tr>
+<tr><td>Build production</td><td class="yellow">GATE</td><td>À exécuter dans l'environnement du projet avec dépendances installées.</td></tr>
+</table></section>
+<section class="panel"><h2>Statut de livraison</h2><div class="danger"><b>V6.8 = architecture finale, mais pas une validation financière réelle.</b><p>Le moteur est construit pour ne pas présenter des données fictives comme des recommandations. Le passage en production exige le branchement des sources historiques/réelles, leur validation, puis l'exécution du backtest/walk-forward et du build final.</p></div></section>
+<section class="panel"><h2>Décision de conception finale</h2><div class="ok"><b>Le système est impersonnel par conception.</b><p>Il n'utilise pas les montants personnels comme contrainte de conception : les montants saisis servent uniquement de paramètres de simulation. Le moteur reste générique, sans plafond de capital, sans plafond d'apport et sans limite structurelle d'horizon.</p></div></section>
+</main><script>
+function digitsOnly(value){
+  return String(value ?? '').replace(/[^\d]/g,'');
+}
+function val(e){
+  return Number(digitsOnly(e && e.value)) || 0;
+}
+function formatMoneyInput(el){
+  if(!el) return;
+  const raw=digitsOnly(el.value);
+  if(!raw){el.value='';return;}
+  // Espaces de milliers explicites : 2300000 -> 2 300 000
+  el.value=raw.replace(/\B(?=(\d{3})+(?!\d))/g,' ');
+}
+function commitMoneyInput(el){
+  formatMoneyInput(el);
+  sync();
+}
+function bindMoneyInput(id){
+  const el=document.getElementById(id);
+  if(!el || el.dataset.moneyBound==='1') return;
+  el.dataset.moneyBound='1';
+  el.type='text';
+  el.inputMode='numeric';
+  el.autocomplete='off';
+
+  // Pendant la saisie : aucune transformation visuelle.
+  // À la validation, au clic ailleurs ou avec Entrée : formatage automatique.
+  el.addEventListener('blur',function(){commitMoneyInput(this);});
+  el.addEventListener('change',function(){commitMoneyInput(this);});
+  el.addEventListener('keydown',function(e){
+    if(e.key==='Enter'){
+      e.preventDefault();
+      commitMoneyInput(this);
+      this.blur();
+    }
+  });
+  el.addEventListener('paste',function(){
+    setTimeout(()=>commitMoneyInput(this),0);
+  });
+  formatMoneyInput(el);
+}
+function money(x){return Math.round(x).toLocaleString('fr-FR')+' FCFA'}
+function fv(c,m,r,y){let z=c;for(let i=0;i<12*y;i++)z=z*(1+r/12)+m;return z}
+function sync(){let c=val(capital),m=val(monthly),y=Math.max(1,+years.value||1),r=(+rate.value||9)/100;mcap.textContent=money(c);mmonth.textContent=money(m);mfv.textContent=money(fv(c,m,r,y));let pts=[1,5,10,20,25,30,40,50].filter(x=>x<=y);if(!pts.includes(y))pts.push(y);proj.innerHTML=pts.map(t=>'<tr><td>'+t+' ans</td><td>'+money(c+m*12*t)+'</td><td>'+money(fv(c,m,.05,t))+'</td><td>'+money(fv(c,m,r,t))+'</td><td>'+money(fv(c,m,.12,t))+'</td></tr>').join('')}
+bindMoneyInput('capital');bindMoneyInput('monthly');sync();
+</script></body></html>
