@@ -47,6 +47,15 @@ export default function UserGuide({ open, onClose }) {
               l’asOf (J-1) — jamais inventé. Si le symbole est inconnu ou le dernier close trop
               ancien : prix N/D.
             </p>
+            <p>
+              <b>Dividendes :</b> absents des séries INTERNAL (OHLC public). L’app n’invente pas de
+              DPS — un yield n’apparaît que s’il est fourni via CSV enrichi. Les graphiques
+              « dividendes estimés » restent vides sans yield observé.
+            </p>
+            <p>
+              <b>Appréciation annuelle :</b> moyenne géométrique des variations de cours année
+              civile (compoundée), plus CAGR prix sur l’historique disponible. Hors dividendes.
+            </p>
           </section>
           <section>
             <h3>4. Comprendre le ranking</h3>

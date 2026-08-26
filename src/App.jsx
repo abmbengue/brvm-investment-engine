@@ -19,7 +19,7 @@ import './App.css';
 
 const ChartsPanel = lazy(() => import('./components/ChartsPanel.jsx'));
 
-const VERSION = '7.7.3';
+const VERSION = '7.8.0';
 const SAMPLE_CSV_URL = `${import.meta.env.BASE_URL}sample-brvm.csv`;
 const ANNUAL_HISTORY_URL = `${import.meta.env.BASE_URL}data/BRVM_HISTORICAL_2006_2025_ANNUAL.csv`;
 const YEAR_SELECT_MIN = 2000;
@@ -584,6 +584,15 @@ export default function App() {
           <b>3 jours</b> autour de l’asOf (J-1) — jamais inventé. Au-delà de 3 jours : prix N/D
           (périmé).
         </p>
+        <p className="muted small">
+          <b>Dividendes :</b> les séries INTERNAL sont OHLC (prix/volume) — pas de DPS ni yield
+          officiel. Les rendements affichés sont donc <b>prix seulement</b> (jamais inventés). Un
+          yield n’apparaît que si votre CSV l’apporte.
+        </p>
+        <p className="muted small">
+          <b>Appréciation / an :</b> moyenne géométrique des variations de cours calendaires
+          (compoundée), sinon CAGR prix sur l’historique dispo (≥ 60 j).
+        </p>
         <div className="table-scroll">
           <table className="holdings-input-table">
             <thead>
@@ -687,6 +696,9 @@ export default function App() {
                   <th>Qté</th>
                   <th>Cours (≤3j)</th>
                   <th>Date cours</th>
+                  <th>Moy. / an*</th>
+                  <th>CAGR prix</th>
+                  <th>Div.</th>
                   <th>Valorisation</th>
                   <th>P&amp;L</th>
                 </tr>
@@ -715,6 +727,45 @@ export default function App() {
                       {p.priceDate || '—'}
                       {p.priced && p.priceAgeDays != null ? ` · J-${p.priceAgeDays}` : ''}
                     </td>
+                    <td
+                      className={
+                        p.avgAnnualReturn == null
+                          ? ''
+                          : p.avgAnnualReturn >= 0
+                            ? 'green'
+                            : 'red'
+                      }
+                      title={
+                        p.annualYears
+                          ? `Moyenne géométrique sur ${p.annualYears} année(s) calendaire(s) — prix seul`
+                          : 'Historique annuel insuffisant'
+                      }
+                    >
+                      {pct(p.avgAnnualReturn)}
+                      {p.annualYears > 0 ? (
+                        <div className="small muted">{p.annualYears} an</div>
+                      ) : null}
+                    </td>
+                    <td
+                      className={
+                        p.annualizedReturn == null
+                          ? ''
+                          : p.annualizedReturn >= 0
+                            ? 'green'
+                            : 'red'
+                      }
+                    >
+                      {pct(p.annualizedReturn)}
+                    </td>
+                    <td>
+                      {p.dividendYield != null ? (
+                        pct(p.dividendYield)
+                      ) : (
+                        <span className="small muted" title="Pas de yield dans les données">
+                          N/D
+                        </span>
+                      )}
+                    </td>
                     <td>{p.marketValue != null ? formatMoneyLabel(p.marketValue) : '—'}</td>
                     <td className={p.pnl == null ? '' : p.pnl >= 0 ? 'green' : 'red'}>
                       {p.pnl == null ? '—' : formatMoneyLabel(p.pnl)}
@@ -723,6 +774,9 @@ export default function App() {
                 ))}
               </tbody>
             </table>
+            {result.holdings.returnNote ? (
+              <p className="small muted">* {result.holdings.returnNote}</p>
+            ) : null}
           </div>
         ) : (
           <p className="yellow small">Aucune position détenue saisie.</p>
@@ -908,7 +962,8 @@ export default function App() {
           <h2>Predictor</h2>
           <p className="small muted">
             Sélection automatique — l&apos;utilisateur ne choisit pas les titres. Rendements =
-            historique prix observé sur la fenêtre dispo (annuel si ≥ 60 j) — jamais inventé.
+            <b> prix seulement</b> (CAGR + moy. géom. annuelle si ≥ 1 an calendaire). Dividendes =
+            N/D tant que le yield n’est pas dans la source (INTERNAL OHLC sans DPS).
           </p>
           {result.ranked.length === 0 ? (
             <p className="yellow">Aucun score — importez des données.</p>
@@ -921,7 +976,8 @@ export default function App() {
                     <th>Société</th>
                     <th>Score</th>
                     <th>Rend. périod.</th>
-                    <th>Rend. ann.</th>
+                    <th>Moy. / an*</th>
+                    <th>CAGR prix</th>
                     <th>Div.</th>
                     <th>+</th>
                     <th>−</th>
@@ -937,8 +993,30 @@ export default function App() {
                       <td className="small">{getCompanyName(r.symbol)}</td>
                       <td>{r.score}</td>
                       <td>{pct(r.totalReturn)}</td>
+                      <td
+                        className={
+                          r.avgAnnualReturn == null
+                            ? ''
+                            : r.avgAnnualReturn >= 0
+                              ? 'green'
+                              : 'red'
+                        }
+                        title={
+                          r.annualYears
+                            ? `${r.annualYears} année(s) calendaire(s)`
+                            : undefined
+                        }
+                      >
+                        {pct(r.avgAnnualReturn)}
+                      </td>
                       <td>{pct(r.annualizedReturn)}</td>
-                      <td>{pct(r.dividendYield)}</td>
+                      <td>
+                        {r.dividendYield != null ? (
+                          pct(r.dividendYield)
+                        ) : (
+                          <span className="small muted">N/D</span>
+                        )}
+                      </td>
                       <td className="small">{r.positives.slice(0, 2).join(', ') || '—'}</td>
                       <td className="small">{r.negatives.slice(0, 2).join(', ') || '—'}</td>
                       <td>{Math.round(r.dataQuality * 100)}%</td>
@@ -952,6 +1030,9 @@ export default function App() {
               </table>
             </div>
           )}
+          <p className="small muted">
+            * Moyenne géométrique des variations de cours année civile → année civile (compoundée).
+          </p>
         </div>
 
         <div className="panel">
@@ -1021,7 +1102,8 @@ export default function App() {
                     <th>Symbole</th>
                     <th>Société</th>
                     <th>Score</th>
-                    <th>Rend. ann.</th>
+                    <th>Moy. / an</th>
+                    <th>CAGR prix</th>
                     <th>Qualité</th>
                     <th>Détenu</th>
                     <th>Poids actuel</th>
@@ -1041,6 +1123,17 @@ export default function App() {
                         <td>{p.symbol}</td>
                         <td className="small">{p.companyName || getCompanyName(p.symbol)}</td>
                         <td>{p.score ?? '—'}</td>
+                        <td
+                          className={
+                            p.avgAnnualReturn == null
+                              ? ''
+                              : p.avgAnnualReturn >= 0
+                                ? 'green'
+                                : 'red'
+                          }
+                        >
+                          {pct(p.avgAnnualReturn)}
+                        </td>
                         <td>{pct(p.annualizedReturn)}</td>
                         <td className={qualityClass(p.qualityLabel)}>{p.qualityLabel || '—'}</td>
                         <td>{p.alreadyHeld ? 'Oui' : 'Non'}</td>

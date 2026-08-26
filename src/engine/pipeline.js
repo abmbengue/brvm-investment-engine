@@ -16,6 +16,7 @@ import {
   normalizeHoldings,
   markHoldings,
   holdingsToPriceMap,
+  attachFeatureStats,
 } from './holdings.js';
 
 /**
@@ -76,7 +77,7 @@ export function runEngine({
 
   const { holdings } = normalizeHoldings(holdingsInput);
   const priceMap = holdingsToPriceMap(features);
-  const marked = markHoldings(holdings, priceMap);
+  const marked = attachFeatureStats(markHoldings(holdings, priceMap), features);
   const heldSymbols = marked.symbols;
 
   const selection =
@@ -220,6 +221,6 @@ export function runEngine({
     liveStatusMessage: csvResult?.meta?.live
       ? `LIVE — ${csvResult.meta.sourceLabel}`
       : 'Pas de LIVE BRVM — données historiques jusqu’à J-1.',
-    engineVersion: '7.7.3',
+    engineVersion: '7.8.0',
   };
 }

@@ -149,6 +149,9 @@ export function decide({ ranked, allocation, qualityGate, profile, stress, heldS
       alreadyHeld: owned,
       totalReturn: item.totalReturn ?? null,
       annualizedReturn: item.annualizedReturn ?? null,
+      priceCagr: item.priceCagr ?? item.annualizedReturn ?? null,
+      avgAnnualReturn: item.avgAnnualReturn ?? null,
+      annualYears: item.annualYears ?? 0,
       returnDays: item.returnDays ?? null,
       dividendYield: item.dividendYield ?? null,
     });

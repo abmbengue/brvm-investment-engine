@@ -157,7 +157,12 @@ export function scoreSymbol(feature) {
     // Observed historical returns (price only) — null when insufficient, never invented
     totalReturn: feature.totalReturn ?? null,
     annualizedReturn: feature.annualizedReturn ?? null,
+    priceCagr: feature.priceCagr ?? feature.annualizedReturn ?? null,
+    avgAnnualReturn: feature.avgAnnualReturn ?? null,
+    annualYears: feature.annualYears ?? 0,
     returnDays: feature.returnDays ?? null,
+    returnBasis: feature.returnBasis || 'PRICE_ONLY',
+    dividendsIncluded: Boolean(feature.dividendYield != null),
     dividendYield: feature.dividendYield ?? null,
   };
 }

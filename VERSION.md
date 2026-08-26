@@ -1,7 +1,14 @@
 # VERSION.md
 
-- **Version** : 7.7.3
+- **Version** : 7.8.0
 - **Date** : 2026-08-26
+
+## 7.8.0
+
+- Clarifie : **dividendes absents** des séries INTERNAL (OHLC) — jamais inventés
+- **Moyenne géométrique annuelle** des variations de cours (compoundée) + CAGR prix
+- Affichage sur holdings / predictor / allocation + export CSV
+- Base de rendement explicite : `PRICE_ONLY`
 
 ## 7.7.3
 

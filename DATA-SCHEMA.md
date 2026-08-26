@@ -74,6 +74,16 @@ Enrichi (nullable) : `pe,dividendYield,roe,revenueGrowth,debtEquity,marketCap,sh
 
 Champ absent → `null` (jamais inventé).
 
+**Dividendes :** la sync INTERNAL (`historicalSync`) ne remplit **pas** `dividendYield` (séries
+OHLC communauté uniquement). Sample / CSV enrichi peuvent fournir un yield. Sans yield, le moteur
+n’illustre pas de dividendes et les rendements titres restent **PRICE_ONLY** (pas de
+TOTAL_RETURN inventé).
+
+**Appréciation annuelle (prix) :**
+- `avgAnnualReturn` = moyenne géométrique des variations close année civile → année civile
+- `annualizedReturn` / `priceCagr` = CAGR prix first→last (si ≥ 60 jours)
+- Les deux excluent les dividendes tant que DPS/yield absents.
+
 ## Source officielle BRVM
 
 Les flux temps réel / fin de journée BRVM sont des **services sous contrat**.

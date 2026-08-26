@@ -53,8 +53,13 @@ export function buildAllocationExportRows(result) {
     data_quality_pct: p.dataQuality != null ? Math.round(p.dataQuality * 100) : '',
     rendement_annuel_observe:
       p.annualizedReturn != null ? Math.round(p.annualizedReturn * 10000) / 100 : '',
+    moy_annuelle_geom_pct:
+      p.avgAnnualReturn != null ? Math.round(p.avgAnnualReturn * 10000) / 100 : '',
+    annees_calendaires: p.annualYears ?? '',
     rendement_periode_observe:
       p.totalReturn != null ? Math.round(p.totalReturn * 10000) / 100 : '',
+    base_rendement: 'PRICE_ONLY',
+    dividende_inclus: 'NON',
   }));
 }
 
@@ -135,6 +140,13 @@ export function buildPortfolioExportRows(result) {
           ? Math.round(((alloc.weightPct || 0) - (alloc.targetWeightPct || 0)) * 10) / 10
           : '',
       pnl: h.pnl ?? '',
+      moy_annuelle_geom_pct:
+        h.avgAnnualReturn != null ? Math.round(h.avgAnnualReturn * 10000) / 100 : '',
+      cagr_prix_pct:
+        h.annualizedReturn != null ? Math.round(h.annualizedReturn * 10000) / 100 : '',
+      dividend_yield_pct:
+        h.dividendYield != null ? Math.round(h.dividendYield * 10000) / 100 : '',
+      base_rendement: 'PRICE_ONLY',
     });
   }
   return rows;

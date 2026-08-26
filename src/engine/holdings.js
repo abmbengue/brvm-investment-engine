@@ -198,6 +198,38 @@ export function markHoldings(holdings, priceBySymbol) {
 }
 
 /**
+ * Attach observed price-return / yield stats from features onto marked holdings.
+ * Never invents missing CAGR or dividends.
+ */
+export function attachFeatureStats(marked, features) {
+  const bySym = new Map();
+  for (const f of features || []) {
+    if (f?.symbol) bySym.set(String(f.symbol).toUpperCase(), f);
+  }
+  const positions = (marked?.positions || []).map((p) => {
+    const f = bySym.get(String(p.symbol).toUpperCase());
+    return {
+      ...p,
+      totalReturn: f?.totalReturn ?? null,
+      annualizedReturn: f?.annualizedReturn ?? null,
+      priceCagr: f?.priceCagr ?? f?.annualizedReturn ?? null,
+      avgAnnualReturn: f?.avgAnnualReturn ?? null,
+      annualYears: f?.annualYears ?? 0,
+      returnDays: f?.returnDays ?? null,
+      returnBasis: f?.returnBasis || 'PRICE_ONLY',
+      dividendsIncluded: Boolean(f?.dividendYield != null && f.dividendYield > 0),
+      dividendYield: f?.dividendYield ?? null,
+    };
+  });
+  return {
+    ...marked,
+    positions,
+    returnNote:
+      'Appréciation = prix seulement (CAGR / moy. géom. annuelle). Dividendes INTERNAL absents — jamais inventés.',
+  };
+}
+
+/**
  * Build price map from features (only fresh market prices within policy window).
  */
 export function holdingsToPriceMap(features) {
