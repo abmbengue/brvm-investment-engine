@@ -7,7 +7,7 @@ https://abmbengue.github.io/brvm-investment-engine/
 - Repo : https://github.com/abmbengue/brvm-investment-engine
 - Tag stable : `v7.0.1-stable`
 - Branche Pages : `gh-pages`
-- Version courante : **V7.6.0**
+- Version courante : **V7.6.1**
 
 ## Vercel
 

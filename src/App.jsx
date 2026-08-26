@@ -1,5 +1,6 @@
 import { useMemo, useState, useCallback, useEffect } from 'react';
 import MoneyInput from './components/MoneyInput.jsx';
+import YearInput from './components/YearInput.jsx';
 import UserGuide from './components/UserGuide.jsx';
 import { formatMoneyLabel } from './lib/money.js';
 import { loadUserSettings, saveUserSettings, resetUserSettings } from './lib/userSettings.js';
@@ -16,7 +17,7 @@ import { loadBundledAnnualHistory } from './data/historical/HistoricalMarketData
 import { getCompanyName } from './data/companyNames.js';
 import './App.css';
 
-const VERSION = '7.6.0';
+const VERSION = '7.6.1';
 const SAMPLE_CSV_URL = `${import.meta.env.BASE_URL}sample-brvm.csv`;
 const ANNUAL_HISTORY_URL = `${import.meta.env.BASE_URL}data/BRVM_HISTORICAL_2006_2025_ANNUAL.csv`;
 const EMPTY_HOLDING = () => ({
@@ -474,64 +475,47 @@ export default function App() {
             onValueChange={setMonthly}
             commitSignal={commitSignal}
           />
-          <label className="field">
-            Année démarrage du plan
-            <br />
-            <input
-              id="plan-start-year"
-              type="number"
-              min={1990}
-              max={2200}
-              value={planStartYear}
-              onChange={(e) => {
-                const y = Math.trunc(Number(e.target.value) || planStartYear);
-                setPlanStartYear(y);
-                if (spotYear < y) setSpotYear(y);
-                if (recurrentStartYear < y) setRecurrentStartYear(y);
-              }}
-            />
-          </label>
-          <label className="field">
-            Année investissement spot
-            <br />
-            <input
-              id="spot-year"
-              type="number"
-              min={planStartYear}
-              max={2200}
-              value={spotYear}
-              onChange={(e) =>
-                setSpotYear(Math.max(planStartYear, Math.trunc(Number(e.target.value) || planStartYear)))
-              }
-            />
-          </label>
-          <label className="field">
-            Année démarrage récurrent
-            <br />
-            <input
-              id="recurrent-start-year"
-              type="number"
-              min={planStartYear}
-              max={2200}
-              value={recurrentStartYear}
-              onChange={(e) =>
-                setRecurrentStartYear(
-                  Math.max(planStartYear, Math.trunc(Number(e.target.value) || planStartYear))
-                )
-              }
-            />
-          </label>
-          <label className="field">
-            Durée (ans, sans plafond)
-            <br />
-            <input
-              id="years"
-              type="number"
-              min={1}
-              value={years}
-              onChange={(e) => setYears(Math.max(1, Number(e.target.value) || 1))}
-            />
-          </label>
+          <YearInput
+            id="plan-start-year"
+            label="Année démarrage du plan"
+            value={planStartYear}
+            min={1990}
+            max={2200}
+            commitSignal={commitSignal}
+            onValueChange={(y) => {
+              setPlanStartYear(y);
+              setSpotYear((s) => (s < y ? y : s));
+              setRecurrentStartYear((r) => (r < y ? y : r));
+            }}
+          />
+          <YearInput
+            id="spot-year"
+            label="Année investissement spot"
+            value={spotYear}
+            min={planStartYear}
+            max={2200}
+            commitSignal={commitSignal}
+            onValueChange={setSpotYear}
+          />
+          <YearInput
+            id="recurrent-start-year"
+            label="Année démarrage récurrent"
+            value={recurrentStartYear}
+            min={planStartYear}
+            max={2200}
+            commitSignal={commitSignal}
+            onValueChange={setRecurrentStartYear}
+          />
+          <YearInput
+            id="years"
+            label="Durée (ans, sans plafond)"
+            value={years}
+            min={1}
+            max={200}
+            maxLength={3}
+            commitSignal={commitSignal}
+            onValueChange={setYears}
+          />
           <label className="field">
             Objectif annuel (%) — hypothèse
             <br />
@@ -571,8 +555,9 @@ export default function App() {
         <p className="small muted">
           Calendrier : apport initial en {planStartYear} → investissement spot en {spotYear} →
           apports mensuels dès {recurrentStartYear} · horizon {years} ans (fin{' '}
-          {planStartYear + years}). L’allocation actions porte sur l’investissement spot. Les
-          rendements titres affichés sont historiques observés, jamais inventés.
+          {planStartYear + years}). Saisir l’année puis Tab / Entrée pour valider. L’allocation
+          actions porte sur l’investissement spot. Les rendements titres affichés sont historiques
+          observés, jamais inventés.
         </p>
         <div className="toolbar">
           <button type="button" id="export-decisions" onClick={() => exportKind('decisions')}>

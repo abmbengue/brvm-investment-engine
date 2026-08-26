@@ -1,7 +1,12 @@
 # VERSION.md
 
-- **Version** : 7.6.0
+- **Version** : 7.6.1
 - **Date** : 2026-08-26
+
+## 7.6.1
+
+- Correctif saisie des années (plan / spot / récurrent / durée) : frappe libre, validation au blur
+- Flèches ↑↓ pour incrémenter ; plus de « snap-back » pendant la frappe
 
 ## 7.6.0
 
