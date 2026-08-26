@@ -11,14 +11,13 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
   Area,
   AreaChart,
 } from 'recharts';
 import { formatMoneyLabel } from '../lib/money.js';
 import {
   buildYearlyIllustration,
-  yearTickInterval,
+  buildYearTicks,
   allocationPieRows,
   decisionPieRows,
   reservePieRows,
@@ -51,7 +50,7 @@ function MoneyTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null;
   return (
     <div className="chart-tooltip">
-      <div className="chart-tooltip-title">{label}</div>
+      <div className="chart-tooltip-title">Année {label}</div>
       {payload.map((p) => (
         <div key={p.dataKey} style={{ color: p.color || p.fill }}>
           {p.name}: {formatMoneyLabel(p.value)}
@@ -75,13 +74,12 @@ function PctTooltip({ active, payload, label }) {
   );
 }
 
-function CountTooltip({ active, payload, label }) {
+function CountTooltip({ active, payload }) {
   if (!active || !payload?.length) return null;
   return (
     <div className="chart-tooltip">
-      <div className="chart-tooltip-title">{label}</div>
       {payload.map((p) => (
-        <div key={p.dataKey} style={{ color: p.color || p.fill }}>
+        <div key={p.dataKey || p.name} style={{ color: p.color || p.fill }}>
           {p.name}: {p.value}
         </div>
       ))}
@@ -89,13 +87,64 @@ function CountTooltip({ active, payload, label }) {
   );
 }
 
-function ChartCard({ title, note, children }) {
+/** HTML legend outside SVG — wraps cleanly, no Recharts overflow */
+function ChartLegend({ items }) {
+  if (!items?.length) return null;
+  return (
+    <ul className="chart-legend" aria-label="Légende">
+      {items.map((it) => (
+        <li key={it.key || it.name}>
+          <span className="chart-legend-swatch" style={{ background: it.color }} />
+          <span>{it.name}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function ChartCard({ title, note, legend, children }) {
   return (
     <section className="panel chart-card">
       <h3>{title}</h3>
       {note ? <p className="small muted">{note}</p> : null}
       <div className="chart-wrap">{children}</div>
+      {legend}
     </section>
+  );
+}
+
+function YearAxis({ ticks }) {
+  return (
+    <XAxis
+      dataKey="year"
+      type="number"
+      domain={['dataMin', 'dataMax']}
+      ticks={ticks}
+      allowDecimals={false}
+      stroke="#8b99b2"
+      tick={{ fill: '#8b99b2', fontSize: 10 }}
+      tickMargin={6}
+      height={36}
+      label={{
+        value: 'Année',
+        position: 'insideBottomRight',
+        offset: -2,
+        fill: '#8b99b2',
+        fontSize: 10,
+      }}
+    />
+  );
+}
+
+function MoneyAxis() {
+  return (
+    <YAxis
+      stroke="#8b99b2"
+      tick={{ fill: '#8b99b2', fontSize: 10 }}
+      tickFormatter={shortMoney}
+      width={52}
+      tickMargin={4}
+    />
   );
 }
 
@@ -110,26 +159,43 @@ export default function ChartsPanel({ result }) {
     dividendYield,
   });
 
-  const tickEvery = yearTickInterval(illustration.schedule.horizonYears);
   const yearsData = illustration.years;
+  const y0 = illustration.xDomain[0];
+  const y1 = illustration.xDomain[1];
+  const yearTicks = buildYearTicks(y0, y1, 7);
   const allocPie = allocationPieRows(result?.allocation);
   const decisionPie = decisionPieRows(result?.decisions);
   const reservePie = reservePieRows(result?.allocation);
   const capitalPie = illustration.capitalStructure;
-
   const hasTitlesLine = yearsData.some((y) => y.portfolioTitles != null);
+
+  const wealthLegend = [
+    { key: 'c', name: 'Capital versé', color: '#78a9ff' },
+    { key: 'v', name: 'Valeur projetée', color: '#7bd79f' },
+    ...(hasTitlesLine ? [{ key: 't', name: 'Scénario titres', color: '#efcf79' }] : []),
+  ];
+  const gainLegend = [
+    { key: 'g', name: 'Gain estimé', color: '#7bd79f' },
+    { key: 'h', name: 'Holdings (hyp.)', color: '#c9a0ff' },
+  ];
+  const contribLegend = [
+    { key: 'i', name: 'Initial', color: '#78a9ff' },
+    { key: 's', name: 'Spot', color: '#7bd79f' },
+    { key: 'r', name: 'Récurrent', color: '#efcf79' },
+    { key: 'd', name: 'Dividendes est.', color: '#ef8e8e' },
+  ];
 
   return (
     <div className="charts-panel">
       <section className="panel">
         <h2>Graphiques patrimoniaux</h2>
         <p className="muted small">
-          Axes X = années calendaires du plan ({illustration.xDomain[0]} → {illustration.xDomain[1]},{' '}
-          {illustration.schedule.horizonYears} ans). Courbes et histogrammes suivent apport initial →
-          spot → récurrent. Hypothèse de rendement :{' '}
-          <b>{((result?.rate || 0) * 100).toFixed(1)}%</b>
+          Axe X = années du plan <b>{y0}</b> → <b>{y1}</b> ({illustration.schedule.horizonYears}{' '}
+          ans) · démarrage {illustration.schedule.planStartYear} · spot{' '}
+          {illustration.schedule.spotYear} · récurrent {illustration.schedule.recurrentStartYear}.
+          Hypothèse : <b>{((result?.rate || 0) * 100).toFixed(1)}%</b>
           {illustration.titlesRate != null
-            ? ` · scénario titres observé ${((illustration.titlesRate || 0) * 100).toFixed(1)}%`
+            ? ` · titres observés ${((illustration.titlesRate || 0) * 100).toFixed(1)}%`
             : ''}
           . Simulation ≠ garantie.
         </p>
@@ -139,29 +205,19 @@ export default function ChartsPanel({ result }) {
       <div className="charts-grid">
         <ChartCard
           title="Courbe — argent investi vs valeur projetée"
-          note="Capital cumulé versé et valeur du plan sous hypothèse de rendement."
+          note="Capital cumulé versé et valeur du plan (hypothèse de rendement)."
+          legend={<ChartLegend items={wealthLegend} />}
         >
-          <ResponsiveContainer width="100%" height={320}>
-            <AreaChart data={yearsData} margin={{ top: 8, right: 12, left: 8, bottom: 8 }}>
+          <ResponsiveContainer width="100%" height={280}>
+            <AreaChart data={yearsData} margin={{ top: 8, right: 16, left: 4, bottom: 4 }}>
               <CartesianGrid stroke="#273650" strokeDasharray="3 3" />
-              <XAxis
-                dataKey="year"
-                stroke="#8b99b2"
-                tick={{ fill: '#8b99b2', fontSize: 11 }}
-                interval={tickEvery}
-              />
-              <YAxis
-                stroke="#8b99b2"
-                tick={{ fill: '#8b99b2', fontSize: 11 }}
-                tickFormatter={shortMoney}
-                width={56}
-              />
+              <YearAxis ticks={yearTicks} />
+              <MoneyAxis />
               <Tooltip content={<MoneyTooltip />} />
-              <Legend />
               <Area
                 type="monotone"
                 dataKey="contributedCum"
-                name="Capital versé (cumul)"
+                name="Capital versé"
                 stroke="#78a9ff"
                 fill="#78a9ff33"
                 strokeWidth={2}
@@ -169,7 +225,7 @@ export default function ChartsPanel({ result }) {
               <Area
                 type="monotone"
                 dataKey="portfolioValue"
-                name="Valeur projetée (hypothèse)"
+                name="Valeur projetée"
                 stroke="#7bd79f"
                 fill="#7bd79f22"
                 strokeWidth={2}
@@ -178,7 +234,7 @@ export default function ChartsPanel({ result }) {
                 <Line
                   type="monotone"
                   dataKey="portfolioTitles"
-                  name="Scénario titres (observé)"
+                  name="Scénario titres"
                   stroke="#efcf79"
                   strokeWidth={2}
                   dot={false}
@@ -189,26 +245,16 @@ export default function ChartsPanel({ result }) {
         </ChartCard>
 
         <ChartCard
-          title="Courbe — gain estimé & holdings croissants"
-          note="Gain = valeur projetée − capital versé. Holdings = valorisation actuelle croissante (hypothèse)."
+          title="Courbe — gain estimé & holdings"
+          note="Gain = valeur projetée − capital versé. Holdings = croiss. hypothèse."
+          legend={<ChartLegend items={gainLegend} />}
         >
-          <ResponsiveContainer width="100%" height={320}>
-            <LineChart data={yearsData} margin={{ top: 8, right: 12, left: 8, bottom: 8 }}>
+          <ResponsiveContainer width="100%" height={280}>
+            <LineChart data={yearsData} margin={{ top: 8, right: 16, left: 4, bottom: 4 }}>
               <CartesianGrid stroke="#273650" strokeDasharray="3 3" />
-              <XAxis
-                dataKey="year"
-                stroke="#8b99b2"
-                tick={{ fill: '#8b99b2', fontSize: 11 }}
-                interval={tickEvery}
-              />
-              <YAxis
-                stroke="#8b99b2"
-                tick={{ fill: '#8b99b2', fontSize: 11 }}
-                tickFormatter={shortMoney}
-                width={56}
-              />
+              <YearAxis ticks={yearTicks} />
+              <MoneyAxis />
               <Tooltip content={<MoneyTooltip />} />
-              <Legend />
               <Line
                 type="monotone"
                 dataKey="gain"
@@ -220,7 +266,7 @@ export default function ChartsPanel({ result }) {
               <Line
                 type="monotone"
                 dataKey="holdingsGrown"
-                name="Portefeuille détenu (croissance hyp.)"
+                name="Holdings (hyp.)"
                 stroke="#c9a0ff"
                 strokeWidth={2}
                 dot={false}
@@ -231,86 +277,94 @@ export default function ChartsPanel({ result }) {
 
         <ChartCard
           title="Histogramme — contributions annuelles"
-          note="Apport initial, spot, apports récurrents et dividendes estimés (si yield observé)."
+          note="Initial, spot, récurrent et dividendes estimés (si yield observé)."
+          legend={<ChartLegend items={contribLegend} />}
         >
-          <ResponsiveContainer width="100%" height={340}>
-            <BarChart data={yearsData} margin={{ top: 8, right: 12, left: 8, bottom: 8 }}>
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={yearsData} margin={{ top: 8, right: 16, left: 4, bottom: 4 }}>
               <CartesianGrid stroke="#273650" strokeDasharray="3 3" />
-              <XAxis
-                dataKey="year"
-                stroke="#8b99b2"
-                tick={{ fill: '#8b99b2', fontSize: 11 }}
-                interval={tickEvery}
-              />
-              <YAxis
-                stroke="#8b99b2"
-                tick={{ fill: '#8b99b2', fontSize: 11 }}
-                tickFormatter={shortMoney}
-                width={56}
-              />
+              <YearAxis ticks={yearTicks} />
+              <MoneyAxis />
               <Tooltip content={<MoneyTooltip />} />
-              <Legend />
-              <Bar dataKey="initialApport" name="Apport initial" stackId="c" fill="#78a9ff" />
-              <Bar dataKey="spot" name="Investissement spot" stackId="c" fill="#7bd79f" />
-              <Bar dataKey="recurrent" name="Apports récurrents" stackId="c" fill="#efcf79" />
-              <Bar dataKey="dividendEst" name="Dividendes estimés" stackId="c" fill="#ef8e8e" />
+              <Bar dataKey="initialApport" name="Initial" stackId="c" fill="#78a9ff" />
+              <Bar dataKey="spot" name="Spot" stackId="c" fill="#7bd79f" />
+              <Bar dataKey="recurrent" name="Récurrent" stackId="c" fill="#efcf79" />
+              <Bar dataKey="dividendEst" name="Dividendes est." stackId="c" fill="#ef8e8e" />
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>
 
         <ChartCard
           title="Camembert — structure du capital versé"
-          note="Répartition totale sur l’horizon : initial / spot / récurrent."
+          note="Répartition totale sur l’horizon."
+          legend={
+            <ChartLegend
+              items={capitalPie.map((e, i) => ({
+                key: e.key,
+                name: `${e.name} (${formatMoneyLabel(e.value)})`,
+                color: COLORS[i % COLORS.length],
+              }))}
+            />
+          }
         >
           {capitalPie.length === 0 ? (
             <p className="yellow small">Aucun capital versé à illustrer.</p>
           ) : (
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
+            <ResponsiveContainer width="100%" height={240}>
+              <PieChart margin={{ top: 4, right: 4, left: 4, bottom: 4 }}>
                 <Pie
                   data={capitalPie}
                   dataKey="value"
                   nameKey="name"
                   cx="50%"
                   cy="50%"
-                  outerRadius={100}
-                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                  innerRadius={45}
+                  outerRadius={85}
+                  paddingAngle={2}
                 >
                   {capitalPie.map((entry, i) => (
                     <Cell key={entry.key} fill={COLORS[i % COLORS.length]} />
                   ))}
                 </Pie>
                 <Tooltip formatter={(v) => formatMoneyLabel(v)} />
-                <Legend />
               </PieChart>
             </ResponsiveContainer>
           )}
         </ChartCard>
 
         <ChartCard
-          title="Camembert — allocation actions (poids)"
-          note="Poids dans le portefeuille actions (allocation courante)."
+          title="Camembert — allocation actions"
+          note="Poids dans le portefeuille actions."
+          legend={
+            <ChartLegend
+              items={allocPie.map((e, i) => ({
+                key: e.name,
+                name: `${e.name} ${e.value}%`,
+                color: COLORS[i % COLORS.length],
+              }))}
+            />
+          }
         >
           {allocPie.length === 0 ? (
-            <p className="yellow small">Aucune allocation — importez des données / assouplissez les filtres.</p>
+            <p className="yellow small">Aucune allocation — importez des données.</p>
           ) : (
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
+            <ResponsiveContainer width="100%" height={240}>
+              <PieChart margin={{ top: 4, right: 4, left: 4, bottom: 4 }}>
                 <Pie
                   data={allocPie}
                   dataKey="value"
                   nameKey="name"
                   cx="50%"
                   cy="50%"
-                  outerRadius={100}
-                  label={({ name, value }) => `${name} ${value}%`}
+                  innerRadius={45}
+                  outerRadius={85}
+                  paddingAngle={1}
                 >
                   {allocPie.map((entry, i) => (
                     <Cell key={entry.name} fill={COLORS[i % COLORS.length]} />
                   ))}
                 </Pie>
                 <Tooltip content={<PctTooltip />} />
-                <Legend />
               </PieChart>
             </ResponsiveContainer>
           )}
@@ -318,89 +372,102 @@ export default function ChartsPanel({ result }) {
 
         <ChartCard
           title="Camembert — spot investi vs réserve"
-          note="Déploiement du cash spot selon le profil de risque."
+          note="Déploiement du cash spot selon le profil."
+          legend={
+            <ChartLegend
+              items={reservePie.map((e, i) => ({
+                key: e.key,
+                name: `${e.name} (${formatMoneyLabel(e.value)})`,
+                color: COLORS[i % COLORS.length],
+              }))}
+            />
+          }
         >
           {reservePie.length === 0 ? (
             <p className="yellow small">Pas de cash spot à illustrer.</p>
           ) : (
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
+            <ResponsiveContainer width="100%" height={240}>
+              <PieChart margin={{ top: 4, right: 4, left: 4, bottom: 4 }}>
                 <Pie
                   data={reservePie}
                   dataKey="value"
                   nameKey="name"
                   cx="50%"
                   cy="50%"
-                  outerRadius={100}
-                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                  innerRadius={45}
+                  outerRadius={85}
+                  paddingAngle={2}
                 >
                   {reservePie.map((entry, i) => (
                     <Cell key={entry.key} fill={COLORS[i % COLORS.length]} />
                   ))}
                 </Pie>
                 <Tooltip formatter={(v) => formatMoneyLabel(v)} />
-                <Legend />
               </PieChart>
             </ResponsiveContainer>
           )}
         </ChartCard>
 
         <ChartCard
-          title="Camembert — décisions (Decision Center)"
-          note="Répartition des actions recommandées (analytique, pas un ordre)."
+          title="Camembert — décisions"
+          note="Actions recommandées (analytique, pas un ordre)."
+          legend={
+            <ChartLegend
+              items={decisionPie.map((e, i) => ({
+                key: e.name,
+                name: `${e.name} (${e.value})`,
+                color: COLORS[i % COLORS.length],
+              }))}
+            />
+          }
         >
           {decisionPie.length === 0 ? (
             <p className="yellow small">Aucune décision à illustrer.</p>
           ) : (
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
+            <ResponsiveContainer width="100%" height={240}>
+              <PieChart margin={{ top: 4, right: 4, left: 4, bottom: 4 }}>
                 <Pie
                   data={decisionPie}
                   dataKey="value"
                   nameKey="name"
                   cx="50%"
                   cy="50%"
-                  outerRadius={100}
-                  label={({ name, value }) => `${name} (${value})`}
+                  innerRadius={45}
+                  outerRadius={85}
+                  paddingAngle={2}
                 >
                   {decisionPie.map((entry, i) => (
                     <Cell key={entry.name} fill={COLORS[i % COLORS.length]} />
                   ))}
                 </Pie>
                 <Tooltip content={<CountTooltip />} />
-                <Legend />
               </PieChart>
             </ResponsiveContainer>
           )}
         </ChartCard>
 
-        <ChartCard
-          title="Histogramme — poids par titre"
-          note="Poids actuel (%) dans l’allocation actions."
-        >
+        <ChartCard title="Histogramme — poids par titre" note="Poids actuel (%) dans l’allocation.">
           {allocPie.length === 0 ? (
             <p className="yellow small">Aucune ligne d’allocation.</p>
           ) : (
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart
-                data={allocPie}
-                margin={{ top: 8, right: 12, left: 8, bottom: 48 }}
-              >
+            <ResponsiveContainer width="100%" height={280}>
+              <BarChart data={allocPie} margin={{ top: 8, right: 12, left: 4, bottom: 40 }}>
                 <CartesianGrid stroke="#273650" strokeDasharray="3 3" />
                 <XAxis
                   dataKey="name"
                   stroke="#8b99b2"
                   tick={{ fill: '#8b99b2', fontSize: 10 }}
                   interval={0}
-                  angle={-35}
+                  angle={-30}
                   textAnchor="end"
-                  height={60}
+                  height={50}
+                  tickMargin={6}
                 />
                 <YAxis
                   stroke="#8b99b2"
-                  tick={{ fill: '#8b99b2', fontSize: 11 }}
+                  tick={{ fill: '#8b99b2', fontSize: 10 }}
                   unit="%"
-                  width={40}
+                  width={36}
                 />
                 <Tooltip content={<PctTooltip />} />
                 <Bar dataKey="value" name="Poids %" fill="#78a9ff">

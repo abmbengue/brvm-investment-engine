@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   buildYearlyIllustration,
   yearTickInterval,
+  buildYearTicks,
   allocationPieRows,
   decisionPieRows,
   portfolioDividendYield,
@@ -63,6 +64,15 @@ describe('illustrationSeries', () => {
     expect(yearTickInterval(30)).toBe(4);
     expect(yearTickInterval(100)).toBe(19);
   });
+
+  it('buildYearTicks always includes start and end', () => {
+    const ticks = buildYearTicks(2026, 2050, 8);
+    expect(ticks[0]).toBe(2026);
+    expect(ticks.at(-1)).toBe(2050);
+    expect(ticks.length).toBeLessThanOrEqual(9);
+    expect(buildYearTicks(2026, 2026)).toEqual([2026]);
+  });
+});
 
   it('allocation and decision pies', () => {
     expect(

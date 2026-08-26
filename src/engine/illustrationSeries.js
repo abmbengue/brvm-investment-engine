@@ -121,14 +121,28 @@ export function buildYearlyIllustration({
   };
 }
 
-/** Tick interval so X axis stays readable for long horizons. */
+/** Tick years for X axis — always includes start and end. */
+export function buildYearTicks(startYear, endYear, maxTicks = 8) {
+  const start = Math.trunc(Number(startYear));
+  const end = Math.trunc(Number(endYear));
+  if (!Number.isFinite(start)) return [];
+  if (!Number.isFinite(end) || end <= start) return [start];
+  const span = end - start;
+  const step = Math.max(1, Math.ceil(span / Math.max(1, maxTicks - 1)));
+  const ticks = [];
+  for (let y = start; y < end; y += step) ticks.push(y);
+  if (ticks[ticks.length - 1] !== end) ticks.push(end);
+  return ticks;
+}
+
+/** @deprecated use buildYearTicks — kept for tests / callers */
 export function yearTickInterval(horizonYears) {
   const h = Math.max(1, Number(horizonYears) || 1);
-  if (h <= 12) return 0; // every year
-  if (h <= 25) return 1; // every 2
-  if (h <= 40) return 4; // every 5
-  if (h <= 80) return 9; // every 10
-  return 19; // every 20
+  if (h <= 10) return 0;
+  if (h <= 20) return 1;
+  if (h <= 35) return 4;
+  if (h <= 60) return 9;
+  return 19;
 }
 
 export function allocationPieRows(allocation) {

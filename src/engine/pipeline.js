@@ -213,6 +213,6 @@ export function runEngine({
     liveStatusMessage: csvResult?.meta?.live
       ? `LIVE — ${csvResult.meta.sourceLabel}`
       : 'Pas de LIVE BRVM — données historiques jusqu’à J-1.',
-    engineVersion: '7.7.0',
+    engineVersion: '7.7.1',
   };
 }

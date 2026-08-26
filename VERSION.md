@@ -1,7 +1,13 @@
 # VERSION.md
 
-- **Version** : 7.7.0
+- **Version** : 7.7.1
 - **Date** : 2026-08-26
+
+## 7.7.1
+
+- Axes X : ticks d’années explicites (début + fin du plan toujours visibles)
+- Légendes hors SVG (plus de débordement) ; libellés raccourcis
+- Camemberts sans labels sur tranches (légende HTML en dessous)
 
 ## 7.7.0
 
