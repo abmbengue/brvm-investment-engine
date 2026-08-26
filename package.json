@@ -1,7 +1,7 @@
 {
   "name": "brvm-investment-engine",
   "private": true,
-  "version": "7.1.0-prepared",
+  "version": "7.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",

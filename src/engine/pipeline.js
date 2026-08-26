@@ -7,9 +7,17 @@ import { evaluateQualityGate } from './qualityGate.js';
 import { runBacktest } from './backtest.js';
 import { buildProjections, futureValue, capitalContributed } from './simulation.js';
 import { getProfile } from './profiles.js';
+import {
+  normalizeHoldings,
+  markHoldings,
+  holdingsToPriceMap,
+} from './holdings.js';
 
 /**
  * Single synchronization / calculation entry point for the engine.
+ * capital = cash disponible SPOT à investir maintenant
+ * monthly = apport mensuel futur (simulation patrimoniale)
+ * holdings = portefeuille déjà acheté [{symbol, shares, avgCost?}]
  */
 export function runEngine({
   capital,
@@ -18,10 +26,11 @@ export function runEngine({
   annualRatePct,
   profileId,
   csvResult,
+  holdings: holdingsInput = [],
 }) {
   const rate = (Number(annualRatePct) || 0) / 100;
   const y = Math.max(1, Math.trunc(Number(years) || 1));
-  const c = Math.max(0, Number(capital) || 0);
+  const spotCash = Math.max(0, Number(capital) || 0);
   const m = Math.max(0, Number(monthly) || 0);
   const profile = getProfile(profileId);
 
@@ -35,14 +44,19 @@ export function runEngine({
     meta: csvResult?.meta || null,
   });
 
+  const { holdings } = normalizeHoldings(holdingsInput);
+  const priceMap = holdingsToPriceMap(features);
+  const marked = markHoldings(holdings, priceMap);
+  const heldSymbols = marked.symbols;
+
   const selection =
     qualityGate.status === 'BLOCKED'
       ? { profile, selected: [], rejected: [], filteredCount: 0 }
-      : selectPortfolio(ranked, profileId);
+      : selectPortfolio(ranked, profileId, heldSymbols);
 
-  const allocation = allocate(selection.selected, c, profileId);
+  const allocation = allocate(selection.selected, spotCash, profileId, marked);
   const stress = runStress({
-    capital: c,
+    capital: spotCash + (marked.marketValue || 0),
     monthly: m,
     years: y,
     centralRate: rate,
@@ -55,14 +69,17 @@ export function runEngine({
     qualityGate,
     profile,
     stress,
+    heldSymbols,
   });
   const backtest = runBacktest(rows, profileId);
-  const projections = buildProjections(c, m, rate, y);
-  const finalValue = futureValue(c, m, rate, y);
-  const contributed = capitalContributed(c, m, y);
+  // Patrimonial sim: spot cash + future monthly (holdings are separate stock positions)
+  const projections = buildProjections(spotCash, m, rate, y);
+  const finalValue = futureValue(spotCash, m, rate, y);
+  const contributed = capitalContributed(spotCash, m, y);
 
   return {
-    capital: c,
+    capital: spotCash,
+    spotCash,
     monthly: m,
     years: y,
     rate,
@@ -71,6 +88,7 @@ export function runEngine({
     ranked,
     selection,
     allocation,
+    holdings: marked,
     stress,
     decisions,
     qualityGate,
@@ -79,6 +97,7 @@ export function runEngine({
     finalValue,
     contributed,
     gain: finalValue - contributed,
+    totalWealthNow: spotCash + (marked.marketValue || 0),
     dataStatus: csvResult?.ok
       ? {
           mode: csvResult.meta?.mode || 'CSV',

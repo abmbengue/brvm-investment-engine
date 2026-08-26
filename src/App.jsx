@@ -6,8 +6,14 @@ import { RISK_PROFILES } from './engine/profiles.js';
 import { loadMarketData, loadFromCsvText } from './data/loadMarketData.js';
 import './App.css';
 
-const VERSION = '7.1.0-PREPARED';
+const VERSION = '7.2.0';
 const SAMPLE_CSV_URL = `${import.meta.env.BASE_URL}sample-brvm.csv`;
+const EMPTY_HOLDING = () => ({
+  id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+  symbol: '',
+  shares: '',
+  avgCost: '',
+});
 
 function pct(x) {
   if (x === null || x === undefined || Number.isNaN(x)) return '—';
@@ -38,6 +44,19 @@ export default function App() {
   const [dataSource, setDataSource] = useState('NONE');
   const [liveStatusMessage, setLiveStatusMessage] = useState('Données temps réel non connectées.');
   const [commitSignal, setCommitSignal] = useState(0);
+  const [holdingRows, setHoldingRows] = useState([EMPTY_HOLDING()]);
+
+  const holdingsInput = useMemo(
+    () =>
+      holdingRows
+        .map((r) => ({
+          symbol: r.symbol,
+          shares: r.shares,
+          avgCost: r.avgCost === '' ? null : r.avgCost,
+        }))
+        .filter((r) => String(r.symbol || '').trim() && Number(r.shares) > 0),
+    [holdingRows]
+  );
 
   const applyProviderResult = useCallback((loaded) => {
     const compat = loaded.csvCompat;
@@ -96,8 +115,9 @@ export default function App() {
         annualRatePct: rate,
         profileId,
         csvResult,
+        holdings: holdingsInput,
       }),
-    [capital, monthly, years, rate, profileId, csvResult]
+    [capital, monthly, years, rate, profileId, csvResult, holdingsInput]
   );
 
   async function onCsvFile(file) {
@@ -128,7 +148,7 @@ export default function App() {
         <div className="toolbar">
           <MoneyInput
             id="capital"
-            label="Capital disponible"
+            label="Disponible spot (cash à investir)"
             value={capital}
             onValueChange={setCapital}
             commitSignal={commitSignal}
@@ -181,29 +201,35 @@ export default function App() {
             RECALCULER
           </button>
         </div>
+        <p className="small muted">
+          Spot = liquidités disponibles maintenant. Apport mensuel = versements futurs (simulation).
+          Le portefeuille déjà acheté se saisit ci-dessous.
+        </p>
       </section>
 
       <section className="metrics">
         <div className="metric">
-          <small>Architecture</small>
-          <div className="big green">INTÉGRÉE</div>
-        </div>
-        <div className="metric">
-          <small>Capital</small>
+          <small>Cash spot</small>
           <div className="big" id="mcap">
-            {formatMoneyLabel(result.capital)}
+            {formatMoneyLabel(result.spotCash)}
           </div>
         </div>
         <div className="metric">
-          <small>Apport</small>
+          <small>Apport mensuel</small>
           <div className="big" id="mmonth">
             {formatMoneyLabel(result.monthly)}
           </div>
         </div>
         <div className="metric">
-          <small>Valeur finale (hypothèse)</small>
-          <div className="big" id="mfv">
-            {formatMoneyLabel(result.finalValue)}
+          <small>Portefeuille détenu</small>
+          <div className="big" id="mhold">
+            {formatMoneyLabel(result.holdings?.marketValue || 0)}
+          </div>
+        </div>
+        <div className="metric">
+          <small>Patrimoine (spot + titres)</small>
+          <div className="big" id="mwealth">
+            {formatMoneyLabel(result.totalWealthNow)}
           </div>
         </div>
         <div className="metric">
@@ -212,6 +238,122 @@ export default function App() {
             {result.qualityGate.status}
           </div>
         </div>
+      </section>
+
+      <section className="panel" id="holdings-panel">
+        <h2>Portefeuille déjà acheté</h2>
+        <p className="muted small">
+          Saisissez les titres que vous détenez déjà (symbole BRVM, quantité, prix d’achat moyen
+          optionnel). La valorisation utilise le dernier cours disponible dans les données — jamais
+          inventé.
+        </p>
+        <table>
+          <thead>
+            <tr>
+              <th>Symbole</th>
+              <th>Quantité</th>
+              <th>Prix d’achat moyen</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {holdingRows.map((row) => (
+              <tr key={row.id}>
+                <td>
+                  <input
+                    aria-label="symbole"
+                    value={row.symbol}
+                    placeholder="ex: SNTS"
+                    onChange={(e) =>
+                      setHoldingRows((rows) =>
+                        rows.map((r) =>
+                          r.id === row.id ? { ...r, symbol: e.target.value.toUpperCase() } : r
+                        )
+                      )
+                    }
+                  />
+                </td>
+                <td>
+                  <input
+                    aria-label="quantité"
+                    inputMode="numeric"
+                    value={row.shares}
+                    placeholder="0"
+                    onChange={(e) =>
+                      setHoldingRows((rows) =>
+                        rows.map((r) =>
+                          r.id === row.id ? { ...r, shares: e.target.value.replace(/[^\d]/g, '') } : r
+                        )
+                      )
+                    }
+                  />
+                </td>
+                <td>
+                  <input
+                    aria-label="prix moyen"
+                    inputMode="decimal"
+                    value={row.avgCost}
+                    placeholder="optionnel"
+                    onChange={(e) =>
+                      setHoldingRows((rows) =>
+                        rows.map((r) =>
+                          r.id === row.id
+                            ? { ...r, avgCost: e.target.value.replace(/[^\d.,]/g, '') }
+                            : r
+                        )
+                      )
+                    }
+                  />
+                </td>
+                <td>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setHoldingRows((rows) =>
+                        rows.length <= 1 ? [EMPTY_HOLDING()] : rows.filter((r) => r.id !== row.id)
+                      )
+                    }
+                  >
+                    Retirer
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <div className="toolbar">
+          <button type="button" id="add-holding" onClick={() => setHoldingRows((r) => [...r, EMPTY_HOLDING()])}>
+            AJOUTER UNE LIGNE
+          </button>
+        </div>
+        {result.holdings?.positionCount > 0 ? (
+          <table>
+            <thead>
+              <tr>
+                <th>Titre</th>
+                <th>Qté</th>
+                <th>Cours</th>
+                <th>Valorisation</th>
+                <th>P&amp;L</th>
+              </tr>
+            </thead>
+            <tbody>
+              {result.holdings.positions.map((p) => (
+                <tr key={p.symbol}>
+                  <td>{p.symbol}</td>
+                  <td>{p.shares}</td>
+                  <td>{p.priced ? formatMoneyLabel(p.price) : 'prix N/D'}</td>
+                  <td>{p.marketValue != null ? formatMoneyLabel(p.marketValue) : '—'}</td>
+                  <td className={p.pnl == null ? '' : p.pnl >= 0 ? 'green' : 'red'}>
+                    {p.pnl == null ? '—' : formatMoneyLabel(p.pnl)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <p className="yellow small">Aucune position détenue saisie.</p>
+        )}
       </section>
 
       <section className="panel">
@@ -287,8 +429,10 @@ export default function App() {
             </div>
           </div>
           <div className="metric">
-            <small>Valeur finale centrale</small>
-            <div className="big">{formatMoneyLabel(result.finalValue)}</div>
+            <small>Valeur finale centrale (cash spot + apports)</small>
+            <div className="big" id="mfv">
+              {formatMoneyLabel(result.finalValue)}
+            </div>
           </div>
           <div className="metric">
             <small>Gain estimé</small>
@@ -358,11 +502,12 @@ export default function App() {
         </div>
 
         <div className="panel">
-          <h2>Allocation — {result.profile.label}</h2>
+          <h2>Allocation du cash spot — {result.profile.label}</h2>
           <p>
-            Réserve : <b>{formatMoneyLabel(result.allocation.reserve)}</b> · Investi :{' '}
-            <b>{formatMoneyLabel(result.allocation.invested)}</b> · Positions :{' '}
-            <b>{result.allocation.positionCount}</b> · Concentration :{' '}
+            Cash spot : <b>{formatMoneyLabel(result.allocation.spotCash)}</b> · Réserve :{' '}
+            <b>{formatMoneyLabel(result.allocation.reserve)}</b> · Spot investi :{' '}
+            <b>{formatMoneyLabel(result.allocation.invested)}</b> · Détenu :{' '}
+            <b>{formatMoneyLabel(result.allocation.existingMarketValue)}</b> · Concentration :{' '}
             <b>{pct(result.allocation.concentration)}</b>
           </p>
           {result.allocation.positions.length === 0 ? (
@@ -373,19 +518,26 @@ export default function App() {
                 <tr>
                   <th>Titre</th>
                   <th>Score</th>
+                  <th>Détenu</th>
+                  <th>Achat spot</th>
+                  <th>Total</th>
                   <th>Poids</th>
                   <th>Montant</th>
-                  <th>Nb titres</th>
                 </tr>
               </thead>
               <tbody>
                 {result.allocation.positions.map((p) => (
                   <tr key={p.symbol}>
-                    <td>{p.symbol}</td>
-                    <td>{p.score}</td>
+                    <td>
+                      {p.symbol}
+                      {p.alreadyHeld ? ' · détenu' : ''}
+                    </td>
+                    <td>{p.score ?? '—'}</td>
+                    <td>{p.existingShares || 0}</td>
+                    <td>{p.buyShares || 0}</td>
+                    <td>{p.shares}</td>
                     <td>{p.weightPct}%</td>
                     <td>{formatMoneyLabel(p.amount)}</td>
-                    <td>{p.shares}</td>
                   </tr>
                 ))}
               </tbody>

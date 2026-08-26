@@ -3,7 +3,7 @@
  * Insufficient data → WAIT / NO ACTION. Never firm recommendation when BLOCKED.
  */
 
-export function decide({ ranked, allocation, qualityGate, profile, stress }) {
+export function decide({ ranked, allocation, qualityGate, profile, stress, heldSymbols = [] }) {
   const decisions = [];
 
   if (qualityGate.status === 'BLOCKED') {
@@ -22,9 +22,20 @@ export function decide({ ranked, allocation, qualityGate, profile, stress }) {
 
   const baissier = stress?.find((s) => s.id === 'baissier');
   const selectedSymbols = new Set((allocation?.positions || []).map((p) => p.symbol));
+  const held = new Set([
+    ...heldSymbols.map((s) => String(s).toUpperCase()),
+    ...((allocation?.existing || []).map((p) => p.symbol) || []),
+  ]);
+  const proposedAdd = new Set(
+    (allocation?.proposedBuys || []).filter((b) => b.action === 'ADD').map((b) => b.symbol)
+  );
+  const proposedBuy = new Set(
+    (allocation?.proposedBuys || []).filter((b) => b.action === 'BUY').map((b) => b.symbol)
+  );
 
   for (const item of ranked) {
-    const inPort = selectedSymbols.has(item.symbol);
+    const inPort = selectedSymbols.has(item.symbol) || held.has(item.symbol);
+    const owned = held.has(item.symbol);
     const dq = item.dataQuality;
     const conf = item.confidence;
     let action = 'WAIT';
@@ -42,36 +53,43 @@ export function decide({ ranked, allocation, qualityGate, profile, stress }) {
       justification = 'Titre non exploitable (volume ou historique)';
       risk = 'liquidité';
       invalidation = 'Volume et historique minimum requis';
-    } else if (item.score >= 70 && conf >= 0.55 && !inPort) {
-      action = 'BUY';
-      justification = `Score élevé (${item.score}) avec confiance ${Math.round(conf * 100)}%`;
-      risk = item.feature.volatility > 0.05 ? 'titre élevé' : 'marché';
-      invalidation = `Score < 55 ou qualité data < 40%`;
-    } else if (item.score >= 62 && inPort) {
-      action = 'ADD';
-      justification = 'Titre déjà retenu, score favorable — renforcement possible';
-      risk = 'concentration';
-      invalidation = `Dépasser limite concentration ${(profile.concentrationLimit * 100).toFixed(0)}%`;
-    } else if (item.score < 40 && inPort) {
+    } else if (item.score < 40 && owned) {
       action = 'EXIT';
-      justification = 'Score faible sur position existante';
+      justification = 'Position déjà détenue avec score faible';
       risk = 'titre';
       invalidation = 'Score remonte au-dessus de 50 avec data quality stable';
-    } else if (item.score < 48 && inPort) {
+    } else if (item.score < 48 && owned) {
       action = 'REDUCE';
-      justification = 'Score médiocre — réduire l’exposition';
+      justification = 'Position détenue — score médiocre, réduire l’exposition';
       risk = 'titre';
       invalidation = 'Score > 55 sur 2 observations';
-    } else if (baissier && baissier.recommendedPositionScale < 0.7 && inPort) {
+    } else if (baissier && baissier.recommendedPositionScale < 0.7 && owned) {
       action = 'REDUCE';
-      justification = 'Stress baissier : taille de position à diminuer';
+      justification = 'Stress baissier sur titre déjà détenu';
       risk = 'marché';
       invalidation = 'Scénario baissier moins sévère / haircut réduit';
+    } else if (proposedAdd.has(item.symbol) || (owned && item.score >= 62 && conf >= 0.45)) {
+      action = 'ADD';
+      justification = owned
+        ? 'Titre déjà en portefeuille — renforcement proposé avec le cash spot'
+        : 'Renforcement proposé';
+      risk = 'concentration';
+      invalidation = `Dépasser limite concentration ${(profile.concentrationLimit * 100).toFixed(0)}%`;
+    } else if (proposedBuy.has(item.symbol) || (item.score >= 70 && conf >= 0.55 && !owned)) {
+      action = 'BUY';
+      justification = `Nouvelle ligne proposée — score ${item.score}, confiance ${Math.round(conf * 100)}%`;
+      risk = item.feature.volatility > 0.05 ? 'titre élevé' : 'marché';
+      invalidation = `Score < 55 ou qualité data < 40%`;
     } else if (item.score >= 55 && !inPort && conf >= 0.45) {
       action = 'WAIT';
       justification = 'Score correct mais hors sélection automatique (contraintes profil)';
       risk = 'modèle';
       invalidation = 'Entrée dans le top sélection du profil';
+    } else if (owned) {
+      action = 'NO ACTION';
+      justification = 'Position détenue — pas de signal d’ajustement';
+      risk = 'modèle';
+      invalidation = 'Changement matériel de score ou de données';
     } else {
       action = 'NO ACTION';
       justification = 'Pas de signal actionnable';
