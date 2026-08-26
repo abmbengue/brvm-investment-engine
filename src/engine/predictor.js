@@ -154,6 +154,11 @@ export function scoreSymbol(feature) {
     feature,
     qualityLabel,
     insufficient,
+    // Observed historical returns (price only) — null when insufficient, never invented
+    totalReturn: feature.totalReturn ?? null,
+    annualizedReturn: feature.annualizedReturn ?? null,
+    returnDays: feature.returnDays ?? null,
+    dividendYield: feature.dividendYield ?? null,
   };
 }
 

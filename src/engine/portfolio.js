@@ -241,6 +241,10 @@ export function allocate(selected, capital, profileId, markedHoldings = null) {
       positives: item.positives,
       negatives: item.negatives,
       alreadyHeld: Boolean(held),
+      totalReturn: item.totalReturn ?? null,
+      annualizedReturn: item.annualizedReturn ?? null,
+      returnDays: item.returnDays ?? null,
+      dividendYield: item.dividendYield ?? item.feature?.dividendYield ?? null,
       explanation:
         weight < rawWeight - 1e-6
           ? `${item.symbol} a un score élevé, mais le poids est plafonné à ${(profile.maxWeight * 100).toFixed(0)} % (profil ${profile.label}) puis le surplus est redistribué.`
@@ -275,6 +279,10 @@ export function allocate(selected, capital, profileId, markedHoldings = null) {
       positives: [],
       negatives: ['Hors sélection automatique'],
       alreadyHeld: true,
+      totalReturn: null,
+      annualizedReturn: null,
+      returnDays: null,
+      dividendYield: null,
       explanation: 'Position détenue hors sélection courante — pas d’achat proposé.',
     });
   }
@@ -294,6 +302,18 @@ export function allocate(selected, capital, profileId, markedHoldings = null) {
   const hhi = eqWeights.reduce((s, w) => s + w * w, 0);
   const effectiveN = hhi > 0 ? 1 / hhi : 0;
 
+  // Weighted observed annualized returns (only titles with known annualizedReturn)
+  let wRet = 0;
+  let wKnown = 0;
+  for (const p of positions) {
+    if (p.amount > 0 && p.annualizedReturn != null && Number.isFinite(p.annualizedReturn)) {
+      wRet += (p.weight || 0) * p.annualizedReturn;
+      wKnown += p.weight || 0;
+    }
+  }
+  const portfolioAnnualizedReturn =
+    wKnown > 0.05 ? Math.round((wRet / wKnown) * 10000) / 10000 : null;
+
   return {
     positions,
     existing: markedHoldings?.positions || [],
@@ -312,6 +332,11 @@ export function allocate(selected, capital, profileId, markedHoldings = null) {
       'Poids du plus gros titre dans le portefeuille actions (hors réserve)',
     hhi: Math.round(hhi * 10000) / 10000,
     effectiveN: Math.round(effectiveN * 100) / 100,
+    portfolioAnnualizedReturn,
+    portfolioReturnNote:
+      portfolioAnnualizedReturn == null
+        ? 'Rendement titres non calculable — historique quotidien insuffisant sur les lignes'
+        : 'Moyenne pondérée des rendements annualisés observés (prix) — pas une prévision',
     positionCount: positions.filter((p) => p.shares > 0 || p.buyShares > 0).length,
     profile,
     targetWeightSum: Math.round(targetWeightSum * 10000) / 10000,

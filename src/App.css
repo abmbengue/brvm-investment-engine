@@ -16,6 +16,7 @@ body{
 .hero{background:linear-gradient(135deg,#162b48,#101a2b)}
 .grid,.metrics{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
 .metrics{grid-template-columns:repeat(5,1fr)}
+.metrics.metrics-wide{grid-template-columns:repeat(6,1fr)}
 .metrics.mini{grid-template-columns:repeat(3,1fr);margin-bottom:12px}
 .big{font-size:22px;font-weight:800}
 .green{color:#7bd79f}
@@ -70,7 +71,7 @@ th{color:#8b99b2}
 h1{margin:0 0 8px;font-size:clamp(1.2rem,3vw,1.8rem)}
 h2{margin:0 0 10px;font-size:1.1rem}
 @media(max-width:950px){
-  .metrics{grid-template-columns:1fr 1fr}
+  .metrics,.metrics.metrics-wide{grid-template-columns:1fr 1fr}
   .grid{grid-template-columns:1fr}
 }
 .tab-nav{

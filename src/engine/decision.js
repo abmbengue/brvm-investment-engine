@@ -147,6 +147,10 @@ export function decide({ ranked, allocation, qualityGate, profile, stress, heldS
           : null,
       buyAmount: proposed?.amount || 0,
       alreadyHeld: owned,
+      totalReturn: item.totalReturn ?? null,
+      annualizedReturn: item.annualizedReturn ?? null,
+      returnDays: item.returnDays ?? null,
+      dividendYield: item.dividendYield ?? null,
     });
   }
 

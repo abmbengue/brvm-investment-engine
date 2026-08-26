@@ -5,7 +5,12 @@ import { runStress } from './stress.js';
 import { decide } from './decision.js';
 import { evaluateQualityGate } from './qualityGate.js';
 import { runBacktest } from './backtest.js';
-import { buildProjections, futureValue, capitalContributed } from './simulation.js';
+import {
+  buildProjectionsScheduled,
+  futureValueScheduled,
+  capitalContributedScheduled,
+  normalizeSchedule,
+} from './simulation.js';
 import { getProfile } from './profiles.js';
 import {
   normalizeHoldings,
@@ -15,8 +20,9 @@ import {
 
 /**
  * Single synchronization / calculation entry point for the engine.
- * capital = cash disponible SPOT à investir maintenant
- * monthly = apport mensuel futur (simulation patrimoniale)
+ * initialApport = apport initial au démarrage du plan
+ * capital = investissement spot (cash actions) à l’année spotYear
+ * monthly = apport mensuel récurrent à partir de recurrentStartYear
  * holdings = portefeuille déjà acheté [{symbol, shares, avgCost?}]
  * annualHistory = contexte HistoricalMarketData (indice annuel, jamais LIVE)
  */
@@ -29,12 +35,27 @@ export function runEngine({
   csvResult,
   holdings: holdingsInput = [],
   annualHistory = null,
+  initialApport = 0,
+  planStartYear,
+  spotYear,
+  recurrentStartYear,
 }) {
   const rate = (Number(annualRatePct) || 0) / 100;
   const y = Math.max(1, Math.trunc(Number(years) || 1));
   const spotCash = Math.max(0, Number(capital) || 0);
   const m = Math.max(0, Number(monthly) || 0);
+  const init = Math.max(0, Number(initialApport) || 0);
   const profile = getProfile(profileId);
+
+  const schedule = normalizeSchedule({
+    initialApport: init,
+    spotAmount: spotCash,
+    monthly: m,
+    planStartYear,
+    spotYear,
+    recurrentStartYear,
+    horizonYears: y,
+  });
 
   const rows = csvResult?.ok ? csvResult.rows : [];
   const features = rows.length ? buildFeatures(rows) : [];
@@ -56,8 +77,20 @@ export function runEngine({
       ? { profile, selected: [], rejected: [], filteredCount: 0 }
       : selectPortfolio(ranked, profileId, heldSymbols);
 
+  // Allocation porte sur l’investissement spot (pas l’apport initial cash hors déploiement)
   const allocation = allocate(selection.selected, spotCash, profileId, marked);
   const hist = annualHistory?.ok ? annualHistory : null;
+
+  const scheduleCommon = {
+    initialApport: schedule.initialApport,
+    spotAmount: schedule.spotAmount,
+    monthly: schedule.monthly,
+    planStartYear: schedule.planStartYear,
+    spotYear: schedule.spotYear,
+    recurrentStartYear: schedule.recurrentStartYear,
+    horizonYears: schedule.horizonYears,
+  };
+
   const stress = runStress({
     capital: spotCash + (marked.marketValue || 0),
     monthly: m,
@@ -66,6 +99,7 @@ export function runEngine({
     allocation,
     profileId,
     historicalCalibration: hist?.stressCalibration || null,
+    schedule: scheduleCommon,
   });
   const decisions = decide({
     ranked,
@@ -76,23 +110,34 @@ export function runEngine({
     heldSymbols,
   });
   const backtest = runBacktest(rows, profileId);
-  // Annual index never validates a stock backtest
   if (!backtest.validated) {
     backtest.status =
       hist?.stockBacktestMessage ||
       'BACKTEST TITRES NON VALIDÉ — HISTORIQUE QUOTIDIEN INSUFFISANT';
   }
-  // Patrimonial sim: spot cash + future monthly (holdings are separate stock positions)
-  const projections = buildProjections(spotCash, m, rate, y);
-  const finalValue = futureValue(spotCash, m, rate, y);
-  const contributed = capitalContributed(spotCash, m, y);
+
+  const projections = buildProjectionsScheduled({
+    ...scheduleCommon,
+    annualRate: rate,
+  });
+  const finalValue = futureValueScheduled({ ...scheduleCommon, annualRate: rate });
+  const contributed = capitalContributedScheduled(scheduleCommon);
+
+  // Optional scenario using observed portfolio weighted return (never invent)
+  const titlesRate = allocation.portfolioAnnualizedReturn;
+  const finalValueTitles =
+    titlesRate != null
+      ? futureValueScheduled({ ...scheduleCommon, annualRate: titlesRate })
+      : null;
 
   return {
     capital: spotCash,
     spotCash,
+    initialApport: schedule.initialApport,
     monthly: m,
     years: y,
     rate,
+    schedule,
     profile,
     features,
     ranked,
@@ -137,7 +182,15 @@ export function runEngine({
     finalValue,
     contributed,
     gain: finalValue - contributed,
-    totalWealthNow: spotCash + (marked.marketValue || 0),
+    finalValueTitles,
+    titlesRate,
+    totalWealthNow: (() => {
+      const yNow = new Date().getFullYear();
+      let cashNow = 0;
+      if (schedule.planStartYear <= yNow) cashNow += schedule.initialApport;
+      if (schedule.spotYear <= yNow) cashNow += spotCash;
+      return cashNow + (marked.marketValue || 0);
+    })(),
     dataStatus: csvResult?.ok
       ? {
           mode: csvResult.meta?.mode || 'CSV',
@@ -160,6 +213,6 @@ export function runEngine({
     liveStatusMessage: csvResult?.meta?.live
       ? `LIVE — ${csvResult.meta.sourceLabel}`
       : 'Pas de LIVE BRVM — données historiques jusqu’à J-1.',
-    engineVersion: '7.5.1',
+    engineVersion: '7.6.0',
   };
 }

@@ -16,7 +16,7 @@ import { loadBundledAnnualHistory } from './data/historical/HistoricalMarketData
 import { getCompanyName } from './data/companyNames.js';
 import './App.css';
 
-const VERSION = '7.5.2';
+const VERSION = '7.6.0';
 const SAMPLE_CSV_URL = `${import.meta.env.BASE_URL}sample-brvm.csv`;
 const ANNUAL_HISTORY_URL = `${import.meta.env.BASE_URL}data/BRVM_HISTORICAL_2006_2025_ANNUAL.csv`;
 const EMPTY_HOLDING = () => ({
@@ -89,10 +89,14 @@ function csvPreviewSummary(loaded) {
 
 export default function App() {
   const initial = loadUserSettings();
+  const [initialApport, setInitialApport] = useState(initial.initialApport);
   const [capital, setCapital] = useState(initial.capital);
   const [monthly, setMonthly] = useState(initial.monthly);
   const [years, setYears] = useState(initial.years);
   const [rate, setRate] = useState(initial.rate);
+  const [planStartYear, setPlanStartYear] = useState(initial.planStartYear);
+  const [spotYear, setSpotYear] = useState(initial.spotYear);
+  const [recurrentStartYear, setRecurrentStartYear] = useState(initial.recurrentStartYear);
   const [profileId, setProfileId] = useState(initial.profileId);
   const [holdingRows, setHoldingRows] = useState(initial.holdingRows);
   const [settingsSavedAt, setSettingsSavedAt] = useState(initial.updatedAt);
@@ -129,9 +133,31 @@ export default function App() {
   );
 
   useEffect(() => {
-    const saved = saveUserSettings({ capital, monthly, years, rate, profileId, holdingRows });
+    const saved = saveUserSettings({
+      initialApport,
+      capital,
+      monthly,
+      years,
+      rate,
+      planStartYear,
+      spotYear,
+      recurrentStartYear,
+      profileId,
+      holdingRows,
+    });
     setSettingsSavedAt(saved.updatedAt);
-  }, [capital, monthly, years, rate, profileId, holdingRows]);
+  }, [
+    initialApport,
+    capital,
+    monthly,
+    years,
+    rate,
+    planStartYear,
+    spotYear,
+    recurrentStartYear,
+    profileId,
+    holdingRows,
+  ]);
 
   useEffect(() => {
     try {
@@ -241,8 +267,25 @@ export default function App() {
         csvResult,
         holdings: holdingsInput,
         annualHistory,
+        initialApport,
+        planStartYear,
+        spotYear,
+        recurrentStartYear,
       }),
-    [capital, monthly, years, rate, profileId, csvResult, holdingsInput, annualHistory]
+    [
+      capital,
+      monthly,
+      years,
+      rate,
+      profileId,
+      csvResult,
+      holdingsInput,
+      annualHistory,
+      initialApport,
+      planStartYear,
+      spotYear,
+      recurrentStartYear,
+    ]
   );
 
   async function onCsvFile(file) {
@@ -283,10 +326,14 @@ export default function App() {
       return;
     }
     const fresh = resetUserSettings();
+    setInitialApport(fresh.initialApport);
     setCapital(fresh.capital);
     setMonthly(fresh.monthly);
     setYears(fresh.years);
     setRate(fresh.rate);
+    setPlanStartYear(fresh.planStartYear);
+    setSpotYear(fresh.spotYear);
+    setRecurrentStartYear(fresh.recurrentStartYear);
     setProfileId(fresh.profileId);
     setHoldingRows(fresh.holdingRows);
     setSettingsSavedAt(fresh.updatedAt);
@@ -345,15 +392,21 @@ export default function App() {
         </p>
       </section>
 
-      <section className="metrics">
+      <section className="metrics metrics-wide">
         <div className="metric">
-          <small>Cash spot</small>
+          <small>Apport initial</small>
+          <div className="big" id="minit">
+            {formatMoneyLabel(result.initialApport ?? 0)}
+          </div>
+        </div>
+        <div className="metric">
+          <small>Invest. spot ({result.schedule?.spotYear ?? spotYear})</small>
           <div className="big" id="mcap">
             {formatMoneyLabel(result.spotCash)}
           </div>
         </div>
         <div className="metric">
-          <small>Apport mensuel</small>
+          <small>Récurrent / mois ({result.schedule?.recurrentStartYear ?? recurrentStartYear})</small>
           <div className="big" id="mmonth">
             {formatMoneyLabel(result.monthly)}
           </div>
@@ -401,19 +454,73 @@ export default function App() {
         <h2>Paramètres de simulation</h2>
         <div className="toolbar">
           <MoneyInput
+            id="initial-apport"
+            label="Apport initial (début du plan)"
+            value={initialApport}
+            onValueChange={setInitialApport}
+            commitSignal={commitSignal}
+          />
+          <MoneyInput
             id="capital"
-            label="Disponible spot (cash à investir)"
+            label="Investissement spot (cash actions)"
             value={capital}
             onValueChange={setCapital}
             commitSignal={commitSignal}
           />
           <MoneyInput
             id="monthly"
-            label="Apport mensuel"
+            label="Apport mensuel récurrent"
             value={monthly}
             onValueChange={setMonthly}
             commitSignal={commitSignal}
           />
+          <label className="field">
+            Année démarrage du plan
+            <br />
+            <input
+              id="plan-start-year"
+              type="number"
+              min={1990}
+              max={2200}
+              value={planStartYear}
+              onChange={(e) => {
+                const y = Math.trunc(Number(e.target.value) || planStartYear);
+                setPlanStartYear(y);
+                if (spotYear < y) setSpotYear(y);
+                if (recurrentStartYear < y) setRecurrentStartYear(y);
+              }}
+            />
+          </label>
+          <label className="field">
+            Année investissement spot
+            <br />
+            <input
+              id="spot-year"
+              type="number"
+              min={planStartYear}
+              max={2200}
+              value={spotYear}
+              onChange={(e) =>
+                setSpotYear(Math.max(planStartYear, Math.trunc(Number(e.target.value) || planStartYear)))
+              }
+            />
+          </label>
+          <label className="field">
+            Année démarrage récurrent
+            <br />
+            <input
+              id="recurrent-start-year"
+              type="number"
+              min={planStartYear}
+              max={2200}
+              value={recurrentStartYear}
+              onChange={(e) =>
+                setRecurrentStartYear(
+                  Math.max(planStartYear, Math.trunc(Number(e.target.value) || planStartYear))
+                )
+              }
+            />
+          </label>
           <label className="field">
             Durée (ans, sans plafond)
             <br />
@@ -462,8 +569,10 @@ export default function App() {
           </p>
         )}
         <p className="small muted">
-          Spot = liquidités disponibles maintenant. Apport mensuel = versements futurs (simulation).
-          Le portefeuille déjà acheté se saisit ci-dessous.
+          Calendrier : apport initial en {planStartYear} → investissement spot en {spotYear} →
+          apports mensuels dès {recurrentStartYear} · horizon {years} ans (fin{' '}
+          {planStartYear + years}). L’allocation actions porte sur l’investissement spot. Les
+          rendements titres affichés sont historiques observés, jamais inventés.
         </p>
         <div className="toolbar">
           <button type="button" id="export-decisions" onClick={() => exportKind('decisions')}>
@@ -780,7 +889,10 @@ export default function App() {
       <section className="grid">
         <div className="panel">
           <h2>Predictor</h2>
-          <p className="small muted">Sélection automatique — l&apos;utilisateur ne choisit pas les titres.</p>
+          <p className="small muted">
+            Sélection automatique — l&apos;utilisateur ne choisit pas les titres. Rendements =
+            historique prix observé sur la fenêtre dispo (annuel si ≥ 60 j) — jamais inventé.
+          </p>
           {result.ranked.length === 0 ? (
             <p className="yellow">Aucun score — importez des données.</p>
           ) : (
@@ -791,6 +903,9 @@ export default function App() {
                     <th>Symbole</th>
                     <th>Société</th>
                     <th>Score</th>
+                    <th>Rend. périod.</th>
+                    <th>Rend. ann.</th>
+                    <th>Div.</th>
                     <th>+</th>
                     <th>−</th>
                     <th>Data</th>
@@ -804,6 +919,9 @@ export default function App() {
                       <td>{r.symbol}</td>
                       <td className="small">{getCompanyName(r.symbol)}</td>
                       <td>{r.score}</td>
+                      <td>{pct(r.totalReturn)}</td>
+                      <td>{pct(r.annualizedReturn)}</td>
+                      <td>{pct(r.dividendYield)}</td>
                       <td className="small">{r.positives.slice(0, 2).join(', ') || '—'}</td>
                       <td className="small">{r.negatives.slice(0, 2).join(', ') || '—'}</td>
                       <td>{Math.round(r.dataQuality * 100)}%</td>
@@ -838,6 +956,12 @@ export default function App() {
               </>
             ) : null}
             {' · '}maxWeight <b>{pct(result.allocation.maxWeight)}</b>
+          </p>
+          <p className="small muted">
+            Rendement titres (pondéré, observé) :{' '}
+            <b>{pct(result.allocation.portfolioAnnualizedReturn)}</b>
+            {' — '}
+            {result.allocation.portfolioReturnNote || 'historique prix uniquement'}
           </p>
           {result.allocation.diversificationLimited && (
             <div className="warn">
@@ -880,6 +1004,7 @@ export default function App() {
                     <th>Symbole</th>
                     <th>Société</th>
                     <th>Score</th>
+                    <th>Rend. ann.</th>
                     <th>Qualité</th>
                     <th>Détenu</th>
                     <th>Poids actuel</th>
@@ -899,6 +1024,7 @@ export default function App() {
                         <td>{p.symbol}</td>
                         <td className="small">{p.companyName || getCompanyName(p.symbol)}</td>
                         <td>{p.score ?? '—'}</td>
+                        <td>{pct(p.annualizedReturn)}</td>
                         <td className={qualityClass(p.qualityLabel)}>{p.qualityLabel || '—'}</td>
                         <td>{p.alreadyHeld ? 'Oui' : 'Non'}</td>
                         <td>{p.weightPct}%</td>
@@ -997,6 +1123,7 @@ export default function App() {
                     <th>Société</th>
                     <th>Action</th>
                     <th>Score</th>
+                    <th>Rend. ann.</th>
                     <th>Qualité</th>
                     <th>Conf.</th>
                     <th>Poids actuel</th>
@@ -1025,6 +1152,7 @@ export default function App() {
                         </b>
                       </td>
                       <td>{d.score ?? '—'}</td>
+                      <td>{pct(d.annualizedReturn)}</td>
                       <td className={qualityClass(d.qualityLabel)}>{d.qualityLabel || '—'}</td>
                       <td>
                         {d.confidence != null ? `${Math.round(d.confidence * 100)}%` : '—'}
@@ -1059,8 +1187,10 @@ export default function App() {
       <section className="panel">
         <h2>Simulation patrimoniale</h2>
         <p className="muted small">
-          Scénarios = hypothèses de simulation, jamais une garantie. Gain estimé = valeur projetée −
-          capital versé.
+          Calendrier : apport initial {result.schedule?.planStartYear} → spot{' '}
+          {result.schedule?.spotYear} → récurrent dès {result.schedule?.recurrentStartYear} · fin{' '}
+          {result.schedule?.endYear}. Scénarios = hypothèses, jamais une garantie. Gain = valeur
+          projetée − capital versé.
         </p>
         <div className="metrics mini">
           <div className="metric">
@@ -1070,7 +1200,7 @@ export default function App() {
             </div>
           </div>
           <div className="metric">
-            <small>Valeur finale centrale (cash spot + apports)</small>
+            <small>Valeur finale (hypothèse {pct(result.rate)})</small>
             <div className="big" id="mfv">
               {formatMoneyLabel(result.finalValue)}
             </div>
@@ -1082,11 +1212,18 @@ export default function App() {
             </div>
           </div>
         </div>
+        {result.finalValueTitles != null && (
+          <p className="small yellow">
+            Scénario titres (rend. pondéré observé {pct(result.titlesRate)}) :{' '}
+            <b>{formatMoneyLabel(result.finalValueTitles)}</b> — historique prix, pas une prévision.
+          </p>
+        )}
         <div className="table-scroll">
           <table>
             <thead>
               <tr>
                 <th>Horizon</th>
+                <th>Fin</th>
                 <th>Capital versé</th>
                 <th>Prudent (5%)</th>
                 <th>Central</th>
@@ -1098,6 +1235,7 @@ export default function App() {
               {result.projections.map((p) => (
                 <tr key={p.years}>
                   <td>{p.years} ans</td>
+                  <td>{p.endYear ?? '—'}</td>
                   <td>{formatMoneyLabel(p.contributed)}</td>
                   <td>{formatMoneyLabel(p.prudent)}</td>
                   <td>{formatMoneyLabel(p.central)}</td>

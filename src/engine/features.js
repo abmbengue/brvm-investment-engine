@@ -46,6 +46,33 @@ export function buildFeatures(rows) {
       momentum = variation;
     }
 
+    // Historical price return over available window — never invent if insufficient
+    let totalReturn = null;
+    let annualizedReturn = null;
+    let returnDays = null;
+    const firstClose = series[0]?.close;
+    const lastClose = last.close;
+    if (
+      series.length >= 2 &&
+      firstClose != null &&
+      lastClose != null &&
+      Number.isFinite(firstClose) &&
+      Number.isFinite(lastClose) &&
+      firstClose > 0
+    ) {
+      totalReturn = (lastClose - firstClose) / firstClose;
+      const t0 = Date.parse(series[0].date);
+      const t1 = Date.parse(last.date);
+      if (Number.isFinite(t0) && Number.isFinite(t1) && t1 > t0) {
+        returnDays = Math.round((t1 - t0) / 86400000);
+        // Annualize only with enough calendar span (avoid noisy short windows)
+        if (returnDays >= 60 && Number.isFinite(totalReturn)) {
+          annualizedReturn = (1 + totalReturn) ** (365.25 / returnDays) - 1;
+          if (!Number.isFinite(annualizedReturn)) annualizedReturn = null;
+        }
+      }
+    }
+
     const avgVol = mean(volumes);
     const volStd = stdev(
       closes.slice(-Math.min(20, closes.length)).map((c, i, a) => {
@@ -94,6 +121,9 @@ export function buildFeatures(rows) {
       volume: last.volume,
       variation,
       momentum,
+      totalReturn,
+      annualizedReturn,
+      returnDays,
       liquidityRaw,
       volatility: volStd,
       pe,

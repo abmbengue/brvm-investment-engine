@@ -51,6 +51,10 @@ export function buildAllocationExportRows(result) {
     score: p.score ?? '',
     confidence: p.confidence != null ? Math.round(p.confidence * 100) : '',
     data_quality_pct: p.dataQuality != null ? Math.round(p.dataQuality * 100) : '',
+    rendement_annuel_observe:
+      p.annualizedReturn != null ? Math.round(p.annualizedReturn * 10000) / 100 : '',
+    rendement_periode_observe:
+      p.totalReturn != null ? Math.round(p.totalReturn * 10000) / 100 : '',
   }));
 }
 
@@ -67,6 +71,8 @@ export function buildDecisionsExportRows(result) {
       score: d.score ?? '',
       confidence_pct: d.confidence != null ? Math.round(d.confidence * 100) : '',
       data_quality_pct: d.dataQuality != null ? Math.round(d.dataQuality * 100) : '',
+      rendement_annuel_observe:
+        d.annualizedReturn != null ? Math.round(d.annualizedReturn * 10000) / 100 : '',
       risk: d.risk || '',
       justification: d.justification || '',
       invalidation: d.invalidation || '',
@@ -85,10 +91,24 @@ export function buildPortfolioExportRows(result) {
   const rows = [];
   rows.push({
     ...meta,
-      section: 'CASH',
-      symbol: 'CASH_SPOT',
-      companyName: 'Cash spot',
-      shares: '',
+    section: 'CASH',
+    symbol: 'APPORT_INITIAL',
+    companyName: 'Apport initial',
+    shares: '',
+    avg_cost: '',
+    price: '',
+    market_value: result?.initialApport ?? 0,
+    weight_pct: '',
+    target_weight_pct: '',
+    ecart_pct: '',
+    pnl: '',
+  });
+  rows.push({
+    ...meta,
+    section: 'CASH',
+    symbol: 'CASH_SPOT',
+    companyName: 'Investissement spot',
+    shares: '',
     avg_cost: '',
     price: '',
     market_value: result?.spotCash ?? result?.capital ?? 0,

@@ -1,7 +1,15 @@
 # VERSION.md
 
-- **Version** : 7.5.2
+- **Version** : 7.6.0
 - **Date** : 2026-08-26
+
+## 7.6.0
+
+- Apport **initial** distinct de l’**investissement spot**
+- Années : démarrage plan, investissement spot, démarrage récurrent
+- Simulation patrimoniale calée sur ce calendrier
+- Rendement historique **par action** (période + annualisé si ≥ 60 j) — jamais inventé
+- Scénario titres optionnel (moyenne pondérée observée)
 
 ## 7.5.2
 

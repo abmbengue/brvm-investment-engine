@@ -1,5 +1,5 @@
 import { getProfile } from './profiles.js';
-import { futureValue } from './simulation.js';
+import { futureValue, futureValueScheduled } from './simulation.js';
 
 /**
  * Stress scenarios on projected portfolio value.
@@ -13,6 +13,7 @@ export function runStress({
   allocation,
   profileId,
   historicalCalibration = null,
+  schedule = null,
 }) {
   const profile = getProfile(profileId);
   const haircut = profile.stressHaircut;
@@ -56,7 +57,6 @@ export function runStress({
         id: h.id,
         label: `${h.label} [indice annuel]`,
         rate: h.rate,
-        // Map extreme negative historical rates to equity shock; never invent levels
         shock: Math.min(0, h.rate),
         source: 'ANNUAL_PRICE_INDEX',
         seriesType: historicalCalibration.seriesType || 'PRICE_INDEX',
@@ -66,9 +66,21 @@ export function runStress({
 
   return scenarios.map((s) => {
     const shockedCapital = Math.max(0, invested * (1 + s.shock) + reserve);
-    const fv = futureValue(shockedCapital, monthly, Math.max(-0.5, s.rate), years);
-    const positionScale =
-      s.shock < -0.1 ? Math.max(0.4, 1 + s.shock) : 1;
+    const rate = Math.max(-0.5, s.rate);
+    let fv;
+    if (schedule) {
+      fv = futureValueScheduled({
+        ...schedule,
+        spotAmount: shockedCapital,
+        initialApport: schedule.initialApport || 0,
+        monthly: schedule.monthly ?? monthly,
+        annualRate: rate,
+        horizonYears: schedule.horizonYears ?? years,
+      });
+    } else {
+      fv = futureValue(shockedCapital, monthly, rate, years);
+    }
+    const positionScale = s.shock < -0.1 ? Math.max(0.4, 1 + s.shock) : 1;
     return {
       ...s,
       shockedCapital,

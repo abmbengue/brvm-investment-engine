@@ -62,9 +62,32 @@ describe('userSettings persistence', () => {
     expect(loadUserSettings(storage).profileId).toBe('equilibre');
   });
 
+  it('persists schedule fields', () => {
+    saveUserSettings(
+      {
+        initialApport: 2_000_000,
+        capital: 3_000_000,
+        monthly: 100_000,
+        years: 20,
+        rate: 8,
+        planStartYear: 2026,
+        spotYear: 2028,
+        recurrentStartYear: 2027,
+        profileId: 'prudent',
+      },
+      storage
+    );
+    const s = loadUserSettings(storage);
+    expect(s.initialApport).toBe(2_000_000);
+    expect(s.spotYear).toBe(2028);
+    expect(s.recurrentStartYear).toBe(2027);
+    expect(s.planStartYear).toBe(2026);
+  });
+
   it('normalize clamps invalid years', () => {
-    const s = normalizeUserSettings({ years: 0, capital: -5, monthly: 'x' });
+    const s = normalizeUserSettings({ years: 0, capital: -5, monthly: 'x', spotYear: 1800 });
     expect(s.years).toBeGreaterThanOrEqual(1);
     expect(s.capital).toBe(DEFAULT_USER_SETTINGS.capital);
+    expect(s.spotYear).toBeGreaterThanOrEqual(1990);
   });
 });

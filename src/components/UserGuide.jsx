@@ -32,8 +32,10 @@ export default function UserGuide({ open, onClose }) {
           <section>
             <h3>2. Renseigner son capital</h3>
             <p>
-              <b>Cash spot</b> = argent disponible maintenant. <b>Apport mensuel</b> = flux futur pour la
-              simulation patrimoniale uniquement (pas un ordre automatique).
+              <b>Apport initial</b> = premier versement au démarrage du plan.{' '}
+              <b>Investissement spot</b> = cash actions déployé à l’année spot (peut être après
+              l’apport initial). <b>Apport mensuel</b> = flux récurrent à partir de l’année de
+              démarrage récurrent (simulation patrimoniale uniquement, pas un ordre automatique).
             </p>
           </section>
           <section>
