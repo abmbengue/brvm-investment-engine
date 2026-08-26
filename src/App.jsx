@@ -3,10 +3,10 @@ import MoneyInput from './components/MoneyInput.jsx';
 import { formatMoneyLabel } from './lib/money.js';
 import { runEngine } from './engine/pipeline.js';
 import { RISK_PROFILES } from './engine/profiles.js';
-import { loadMarketData, loadFromCsvText } from './data/loadMarketData.js';
+import { loadMarketData, loadFromCsvText, refreshInternalHistoricalDb } from './data/loadMarketData.js';
 import './App.css';
 
-const VERSION = '7.2.0';
+const VERSION = '7.3.0';
 const SAMPLE_CSV_URL = `${import.meta.env.BASE_URL}sample-brvm.csv`;
 const EMPTY_HOLDING = () => ({
   id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
@@ -28,6 +28,7 @@ function gateClass(status) {
 
 function dataStatusBadge(mode, live) {
   if (live && mode === 'LIVE') return { label: 'LIVE', className: 'status-live' };
+  if (mode === 'INTERNAL') return { label: 'INTERNAL', className: 'status-internal' };
   if (mode === 'SAMPLE') return { label: 'SAMPLE', className: 'status-sample' };
   if (mode === 'CSV') return { label: 'CSV', className: 'status-csv' };
   return { label: mode === 'BLOCKED' ? 'BLOCKED' : 'NONE', className: 'status-blocked' };
@@ -83,17 +84,30 @@ export default function App() {
     return applyProviderResult(loaded);
   }, [applyProviderResult]);
 
+  const refreshHistorical = useCallback(async () => {
+    setCsvMessage('Construction / mise à jour de la base interne historique…');
+    const loaded = await refreshInternalHistoricalDb();
+    return applyProviderResult(loaded);
+  }, [applyProviderResult]);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
+        setCsvMessage('Initialisation de la base interne historique…');
         const loaded = await loadMarketData({ sampleUrl: SAMPLE_CSV_URL });
         if (!cancelled) applyProviderResult(loaded);
       } catch (e) {
         if (!cancelled) {
           setDataSource('NONE');
           setLiveStatusMessage('Données temps réel non connectées.');
-          setCsvMessage(`SAMPLE indisponible — importez un CSV. (${e.message})`);
+          setCsvMessage(`Base interne indisponible — fallback SAMPLE/CSV. (${e.message})`);
+          try {
+            const fb = await loadMarketData({ sampleUrl: SAMPLE_CSV_URL, preferSample: true });
+            if (!cancelled) applyProviderResult(fb);
+          } catch {
+            /* ignore */
+          }
         }
       }
     })();
@@ -401,6 +415,15 @@ export default function App() {
             onClick={() => loadSample().catch((e) => setCsvMessage(`SAMPLE : ${e.message}`))}
           >
             CHARGER SAMPLE
+          </button>
+          <button
+            type="button"
+            id="refresh-historical"
+            onClick={() =>
+              refreshHistorical().catch((e) => setCsvMessage(`Base historique : ${e.message}`))
+            }
+          >
+            ACTUALISER BASE HISTORIQUE
           </button>
           <a className="badge" href={SAMPLE_CSV_URL} download>
             Télécharger CSV d&apos;exemple (SAMPLE)

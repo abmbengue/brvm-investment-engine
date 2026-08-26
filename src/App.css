@@ -60,6 +60,7 @@ th{color:#8b99b2}
   margin-right:6px;
 }
 .status-live{background:#10291e;border-color:#315f44;color:#7bd79f}
+.status-internal{background:#1a2030;border-color:#5b7ea6;color:#9ec1ff}
 .status-sample{background:#102038;border-color:#3d5f8a;color:#78a9ff}
 .status-csv{background:#211d10;border-color:#665526;color:#efcf79}
 .status-blocked{background:#241313;border-color:#693b3b;color:#ef8e8e}

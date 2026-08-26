@@ -104,11 +104,21 @@ describe('SAMPLE provider + fallback', () => {
   });
 
   it('API unavailable does not crash loadMarketData', async () => {
+    const { __resetMemoryDbForTests } = await import('./internalDb.js');
+    __resetMemoryDbForTests();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new Error('offline');
+      })
+    );
     const official = createBrvmOfficialStubProvider();
     expect(await official.isAvailable()).toBe(false);
-    const r = await loadMarketData({ sampleUrl: null, csvText: '' });
+    const r = await loadMarketData({ sampleUrl: null, csvText: '', forceHistoricalSync: true });
     expect(r.liveConnected).toBe(false);
-    expect(r.liveStatusMessage).toMatch(/non connectées/i);
+    expect(r.meta.live).not.toBe(true);
+    expect(String(r.liveStatusMessage || '')).not.toMatch(/^LIVE/i);
+    vi.unstubAllGlobals();
   });
 });
 

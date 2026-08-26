@@ -1,14 +1,23 @@
 # DATA-SCHEMA.md
 
-## Statut actuel (V7.1.0-PREPARED)
+## Statut actuel (V7.3.0)
 
 | Mode | Live | Disponible |
 |------|------|------------|
-| SAMPLE | NON | OUI (bundlé) |
-| CSV | NON | OUI (import utilisateur) |
-| LIVE BRVM | — | **NON** — contrat / API autorisée requis |
+| INTERNAL | NON | OUI — base historique locale (IndexedDB) |
+| SAMPLE | NON | OUI (fallback) |
+| CSV | NON | OUI (import + fusion interne) |
+| LIVE BRVM | — | **NON** — contrat officiel requis |
 
-Message UI : **Données temps réel non connectées.**
+Message : base interne historique active **≠** flux BRVM live.
+
+## Base interne
+
+Construit à partir de séries historiques publiques :
+`https://github.com/Fredysessie/brvm-data-public`
+
+Univers cœur : SNTS, BOAB, ORAC, SGBC, ETIT, CABC, ECOC, TTLC, SHEC, SIVC, SDCC, CIEC  
+Fenêtre : ~3 ans de daily bars.
 
 ## Architecture
 

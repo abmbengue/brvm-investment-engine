@@ -49,6 +49,7 @@ export const DATA_MODES = Object.freeze({
   LIVE: 'LIVE',
   CSV: 'CSV',
   SAMPLE: 'SAMPLE',
+  INTERNAL: 'INTERNAL',
   NONE: 'NONE',
   BLOCKED: 'BLOCKED',
 });
