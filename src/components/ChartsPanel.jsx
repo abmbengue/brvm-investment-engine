@@ -22,6 +22,7 @@ import {
   decisionPieRows,
   reservePieRows,
   portfolioDividendYield,
+  totalPortfolioPieRows,
 } from '../engine/illustrationSeries.js';
 
 const COLORS = [
@@ -36,6 +37,24 @@ const COLORS = [
   '#a8e0a0',
   '#d4a5a5',
 ];
+
+/** Distinct hues for total-portfolio pie */
+const PIE_COLORS = {
+  stocks: '#c9a0ff',
+  initial: '#78a9ff',
+  initial_gain: '#a8c4ff',
+  spot: '#7bd79f',
+  spot_gain: '#a8e8c4',
+  recurrent: '#efcf79',
+  recurrent_gain: '#f5e0a8',
+};
+
+function pieColor(entry, index) {
+  if (entry?.key && PIE_COLORS[entry.key]) return PIE_COLORS[entry.key];
+  if (entry?.kind === 'gain') return '#7bd79f';
+  if (entry?.kind === 'stocks') return '#c9a0ff';
+  return COLORS[index % COLORS.length];
+}
 
 function shortMoney(v) {
   const n = Number(v) || 0;
@@ -167,6 +186,11 @@ export default function ChartsPanel({ result }) {
   const decisionPie = decisionPieRows(result?.decisions);
   const reservePie = reservePieRows(result?.allocation);
   const capitalPie = illustration.capitalStructure;
+  const totalPie = totalPortfolioPieRows({
+    schedule,
+    annualRate: result?.rate || 0,
+    holdingsMarketValue: result?.holdings?.marketValue || 0,
+  });
   const hasTitlesLine = yearsData.some((y) => y.portfolioTitles != null);
 
   const wealthLegend = [
@@ -203,6 +227,46 @@ export default function ChartsPanel({ result }) {
       </section>
 
       <div className="charts-grid">
+        <ChartCard
+          title={`Camembert — portefeuille total (fin ${totalPie.endYear})`}
+          note={`${totalPie.note} Total ≈ ${formatMoneyLabel(totalPie.total)} · taux ${(
+            (result?.rate || 0) * 100
+          ).toFixed(1)}%.`}
+          legend={
+            <ChartLegend
+              items={totalPie.rows.map((e, i) => ({
+                key: e.key,
+                name: `${e.name} (${formatMoneyLabel(e.value)})`,
+                color: pieColor(e, i),
+              }))}
+            />
+          }
+        >
+          {totalPie.rows.length === 0 ? (
+            <p className="yellow small">Rien à illustrer — renseignez apports, spot ou holdings.</p>
+          ) : (
+            <ResponsiveContainer width="100%" height={280}>
+              <PieChart margin={{ top: 4, right: 4, left: 4, bottom: 4 }}>
+                <Pie
+                  data={totalPie.rows}
+                  dataKey="value"
+                  nameKey="name"
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={50}
+                  outerRadius={95}
+                  paddingAngle={2}
+                >
+                  {totalPie.rows.map((entry, i) => (
+                    <Cell key={entry.key} fill={pieColor(entry, i)} />
+                  ))}
+                </Pie>
+                <Tooltip formatter={(v) => formatMoneyLabel(v)} />
+              </PieChart>
+            </ResponsiveContainer>
+          )}
+        </ChartCard>
+
         <ChartCard
           title="Courbe — argent investi vs valeur projetée"
           note="Capital cumulé versé et valeur du plan (hypothèse de rendement)."

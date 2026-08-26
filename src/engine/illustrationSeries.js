@@ -2,7 +2,12 @@
  * Build illustration series for charts.
  * Rates/dividends are explicit hypotheses or observed yields — never invent missing market data.
  */
-import { normalizeSchedule, futureValueScheduled, capitalContributedScheduled } from './simulation.js';
+import {
+  normalizeSchedule,
+  futureValueScheduled,
+  capitalContributedScheduled,
+  futureValueBySource,
+} from './simulation.js';
 
 function roundMoney(n) {
   return Math.round(Number(n) || 0);
@@ -26,6 +31,113 @@ export function portfolioDividendYield(allocation) {
   }
   if (known < 0.05) return null;
   return w / known;
+}
+
+/**
+ * Pie of total projected portfolio at horizon:
+ * - stocks = valeur totale projetée des titres détenus
+ * - initial / spot / récurrents = capital versé + appréciation (hypothèse de taux)
+ */
+export function totalPortfolioPieRows({
+  schedule,
+  annualRate = 0,
+  holdingsMarketValue = 0,
+} = {}) {
+  const by = futureValueBySource({
+    ...(schedule || {}),
+    annualRate,
+    holdingsMarketValue,
+  });
+
+  const rows = [];
+
+  const stocksGrown = roundMoney(by.holdings.grown);
+  if (stocksGrown > 0) {
+    rows.push({
+      key: 'stocks',
+      name: 'Actions (valeur totale)',
+      kind: 'stocks',
+      value: stocksGrown,
+      contributed: roundMoney(by.holdings.contributed),
+      appreciation: roundMoney(by.holdings.appreciation),
+    });
+  }
+
+  const pushContrib = (key, capitalName, gainName, bucket) => {
+    const contributed = roundMoney(bucket.contributed);
+    const grown = roundMoney(bucket.grown);
+    if (contributed <= 0 && grown <= 0) return;
+
+    if (grown >= contributed) {
+      if (contributed > 0) {
+        rows.push({
+          key,
+          name: capitalName,
+          kind: 'capital',
+          value: contributed,
+          contributed,
+          appreciation: 0,
+        });
+      }
+      const gain = grown - contributed;
+      if (gain > 0) {
+        rows.push({
+          key: `${key}_gain`,
+          name: gainName,
+          kind: 'gain',
+          value: gain,
+          contributed: 0,
+          appreciation: gain,
+        });
+      }
+    } else if (grown > 0) {
+      // Dépréciation : une seule part = valeur restante (le pie = richesse, pas la perte)
+      rows.push({
+        key,
+        name: `${capitalName} (après dépréciation)`,
+        kind: 'capital',
+        value: grown,
+        contributed,
+        appreciation: grown - contributed,
+      });
+    }
+  };
+
+  pushContrib('initial', 'Apport initial', 'Appréciation initial', by.initial);
+  pushContrib('spot', 'Investissement spot', 'Appréciation spot', by.spot);
+  pushContrib('recurrent', 'Apports récurrents', 'Appréciation récurrents', by.recurrent);
+
+  const total = rows.reduce((a, r) => a + r.value, 0);
+  return {
+    rows,
+    total: roundMoney(total),
+    bySource: {
+      initial: {
+        contributed: roundMoney(by.initial.contributed),
+        grown: roundMoney(by.initial.grown),
+        appreciation: roundMoney(by.initial.appreciation),
+      },
+      spot: {
+        contributed: roundMoney(by.spot.contributed),
+        grown: roundMoney(by.spot.grown),
+        appreciation: roundMoney(by.spot.appreciation),
+      },
+      recurrent: {
+        contributed: roundMoney(by.recurrent.contributed),
+        grown: roundMoney(by.recurrent.grown),
+        appreciation: roundMoney(by.recurrent.appreciation),
+      },
+      holdings: {
+        contributed: roundMoney(by.holdings.contributed),
+        grown: roundMoney(by.holdings.grown),
+        appreciation: roundMoney(by.holdings.appreciation),
+      },
+    },
+    rate: by.rate,
+    endYear: by.schedule.planStartYear + by.schedule.horizonYears - 1,
+    note:
+      'Fin d’horizon : valeur totale des actions + chaque apport (capital et appréciation) sous l’hypothèse de rendement — pas une prévision.',
+  };
 }
 
 /**

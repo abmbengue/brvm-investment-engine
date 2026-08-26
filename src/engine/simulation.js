@@ -110,6 +110,79 @@ export function futureValueScheduled({
   return z;
 }
 
+/**
+ * Attribute terminal FV to each cashflow source (same monthly compounding as FV).
+ * Holdings assumed already held at plan start — grown over full horizon.
+ * Never invents a rate: annualRate is an explicit hypothesis.
+ */
+export function futureValueBySource({
+  initialApport = 0,
+  spotAmount = 0,
+  monthly = 0,
+  annualRate = 0,
+  planStartYear,
+  spotYear,
+  recurrentStartYear,
+  horizonYears = 1,
+  holdingsMarketValue = 0,
+} = {}) {
+  const s = normalizeSchedule({
+    initialApport,
+    spotAmount,
+    monthly,
+    planStartYear,
+    spotYear,
+    recurrentStartYear,
+    horizonYears,
+  });
+  const r = Number(annualRate) || 0;
+  const monthlyRate = r / 12;
+  const months = 12 * s.horizonYears;
+  const spotMonth = s.spotOffsetYears * 12;
+  const recMonth = s.recurrentOffsetYears * 12;
+
+  let initialGrown = 0;
+  let spotGrown = 0;
+  let recurrentGrown = 0;
+  let holdingsGrown = Math.max(0, Number(holdingsMarketValue) || 0);
+  let recurrentContributed = 0;
+
+  for (let i = 0; i < months; i++) {
+    if (i === 0) initialGrown += s.initialApport;
+    if (i === spotMonth) spotGrown += s.spotAmount;
+    if (i >= recMonth) {
+      recurrentGrown += s.monthly;
+      recurrentContributed += s.monthly;
+    }
+    initialGrown *= 1 + monthlyRate;
+    spotGrown *= 1 + monthlyRate;
+    recurrentGrown *= 1 + monthlyRate;
+    holdingsGrown *= 1 + monthlyRate;
+  }
+
+  const hold0 = Math.max(0, Number(holdingsMarketValue) || 0);
+  const bucket = (contributed, grown) => {
+    const c = Math.max(0, Number(contributed) || 0);
+    const g = Math.max(0, Number(grown) || 0);
+    return {
+      contributed: c,
+      grown: g,
+      appreciation: g - c,
+    };
+  };
+
+  return {
+    schedule: s,
+    rate: r,
+    initial: bucket(s.initialApport, initialGrown),
+    spot: bucket(s.spotAmount, spotGrown),
+    recurrent: bucket(recurrentContributed, recurrentGrown),
+    holdings: bucket(hold0, holdingsGrown),
+    totalGrown: initialGrown + spotGrown + recurrentGrown + holdingsGrown,
+    planGrown: initialGrown + spotGrown + recurrentGrown,
+  };
+}
+
 export function capitalContributedScheduled({
   initialApport = 0,
   spotAmount = 0,

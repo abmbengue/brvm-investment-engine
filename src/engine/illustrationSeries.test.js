@@ -6,6 +6,7 @@ import {
   allocationPieRows,
   decisionPieRows,
   portfolioDividendYield,
+  totalPortfolioPieRows,
 } from './illustrationSeries.js';
 
 describe('illustrationSeries', () => {
@@ -97,5 +98,33 @@ describe('illustrationSeries', () => {
         positions: [{ weight: 0.5, dividendYield: 0.04 }],
       })
     ).toBeCloseTo(0.04);
+  });
+
+  it('totalPortfolioPieRows splits capital and appreciation', () => {
+    const pie = totalPortfolioPieRows({
+      schedule,
+      annualRate: 0.09,
+      holdingsMarketValue: 500_000,
+    });
+    expect(pie.rows.some((r) => r.key === 'stocks')).toBe(true);
+    expect(pie.rows.some((r) => r.key === 'initial')).toBe(true);
+    expect(pie.rows.some((r) => r.key === 'initial_gain')).toBe(true);
+    expect(pie.rows.some((r) => r.key === 'spot')).toBe(true);
+    expect(pie.rows.some((r) => r.key === 'spot_gain')).toBe(true);
+    expect(pie.rows.some((r) => r.key === 'recurrent')).toBe(true);
+    expect(pie.rows.some((r) => r.key === 'recurrent_gain')).toBe(true);
+    const sum = pie.rows.reduce((a, r) => a + r.value, 0);
+    expect(sum).toBe(pie.total);
+    expect(pie.bySource.holdings.grown).toBeGreaterThan(pie.bySource.holdings.contributed);
+  });
+
+  it('totalPortfolioPieRows at 0% has capital only (no gains)', () => {
+    const pie = totalPortfolioPieRows({
+      schedule: { ...schedule, horizonYears: 3 },
+      annualRate: 0,
+      holdingsMarketValue: 100_000,
+    });
+    expect(pie.rows.every((r) => r.kind !== 'gain')).toBe(true);
+    expect(pie.rows.find((r) => r.key === 'stocks')?.value).toBe(100_000);
   });
 });

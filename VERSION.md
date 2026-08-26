@@ -1,7 +1,12 @@
 # VERSION.md
 
-- **Version** : 7.8.0
+- **Version** : 7.9.0
 - **Date** : 2026-08-26
+
+## 7.9.0
+
+- Camembert **portefeuille total** : actions (valeur) + initial/spot/récurrents avec appréciation
+- Attribution FV par source de flux (même capitalisation mensuelle que la simulation)
 
 ## 7.8.0
 

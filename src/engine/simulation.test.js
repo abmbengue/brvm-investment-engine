@@ -5,6 +5,7 @@ import {
   capitalContributedScheduled,
   normalizeSchedule,
   buildProjectionsScheduled,
+  futureValueBySource,
 } from './simulation.js';
 
 describe('schedule simulation', () => {
@@ -85,5 +86,25 @@ describe('schedule simulation', () => {
     });
     expect(p.some((x) => x.years === 10)).toBe(true);
     expect(p.find((x) => x.years === 10).endYear).toBe(2036);
+  });
+
+  it('futureValueBySource sums to scheduled FV + holdings', () => {
+    const common = {
+      initialApport: 1_000_000,
+      spotAmount: 2_000_000,
+      monthly: 50_000,
+      annualRate: 0.09,
+      planStartYear: 2026,
+      spotYear: 2028,
+      recurrentStartYear: 2027,
+      horizonYears: 5,
+      holdingsMarketValue: 500_000,
+    };
+    const by = futureValueBySource(common);
+    const planFv = futureValueScheduled(common);
+    expect(by.planGrown).toBeCloseTo(planFv, 6);
+    expect(by.initial.grown + by.spot.grown + by.recurrent.grown).toBeCloseTo(planFv, 6);
+    expect(by.holdings.grown).toBeGreaterThan(500_000);
+    expect(by.totalGrown).toBeCloseTo(planFv + by.holdings.grown, 6);
   });
 });
