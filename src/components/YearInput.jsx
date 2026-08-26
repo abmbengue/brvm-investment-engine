@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 
 /**
- * Year input: free typing while focused; clamp/commit on blur / Enter / external commit.
+ * Year input: free typing while focused; clamp/commit on blur / Enter / steppers.
  * Avoids the controlled number-input bug where intermediate digits snap back.
  */
 export function clampYear(raw, { min = 1990, max = 2200, fallback } = {}) {
@@ -50,45 +50,68 @@ export default function YearInput({
     onValueChange(y);
   }
 
+  function step(delta) {
+    const base = clampYear(text, { min, max, fallback: value });
+    commit(String(Math.max(min, Math.min(max, base + delta))));
+  }
+
   return (
-    <label className="field">
+    <label className="field year-field">
       {label}
       <br />
-      <input
-        ref={inputRef}
-        id={id}
-        type="text"
-        inputMode="numeric"
-        autoComplete="off"
-        maxLength={maxLength}
-        value={text}
-        onChange={(e) => setText(e.target.value.replace(/[^\d]/g, '').slice(0, 4))}
-        onFocus={(e) => {
-          setFocused(true);
-          e.target.select();
-        }}
-        onBlur={() => {
-          setFocused(false);
-          commit();
-        }}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') {
-            e.preventDefault();
+      <span className="year-input-row">
+        <button
+          type="button"
+          className="year-step"
+          aria-label={`Diminuer ${label}`}
+          onClick={() => step(-1)}
+        >
+          −
+        </button>
+        <input
+          ref={inputRef}
+          id={id}
+          type="text"
+          inputMode="numeric"
+          autoComplete="off"
+          maxLength={maxLength}
+          value={text}
+          onChange={(e) =>
+            setText(e.target.value.replace(/[^\d]/g, '').slice(0, maxLength))
+          }
+          onFocus={(e) => {
+            setFocused(true);
+            e.target.select();
+          }}
+          onBlur={() => {
+            setFocused(false);
             commit();
-            e.currentTarget.blur();
-          }
-          if (e.key === 'ArrowUp') {
-            e.preventDefault();
-            const base = clampYear(text, { min, max, fallback: value });
-            commit(String(Math.min(max, base + 1)));
-          }
-          if (e.key === 'ArrowDown') {
-            e.preventDefault();
-            const base = clampYear(text, { min, max, fallback: value });
-            commit(String(Math.max(min, base - 1)));
-          }
-        }}
-      />
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              commit();
+              e.currentTarget.blur();
+            }
+            if (e.key === 'ArrowUp') {
+              e.preventDefault();
+              step(1);
+            }
+            if (e.key === 'ArrowDown') {
+              e.preventDefault();
+              step(-1);
+            }
+          }}
+        />
+        <button
+          type="button"
+          className="year-step"
+          aria-label={`Augmenter ${label}`}
+          onClick={() => step(1)}
+        >
+          +
+        </button>
+      </span>
     </label>
   );
 }

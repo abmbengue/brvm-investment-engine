@@ -17,7 +17,7 @@ import { loadBundledAnnualHistory } from './data/historical/HistoricalMarketData
 import { getCompanyName } from './data/companyNames.js';
 import './App.css';
 
-const VERSION = '7.6.1';
+const VERSION = '7.6.2';
 const SAMPLE_CSV_URL = `${import.meta.env.BASE_URL}sample-brvm.csv`;
 const ANNUAL_HISTORY_URL = `${import.meta.env.BASE_URL}data/BRVM_HISTORICAL_2006_2025_ANNUAL.csv`;
 const EMPTY_HOLDING = () => ({
@@ -482,17 +482,13 @@ export default function App() {
             min={1990}
             max={2200}
             commitSignal={commitSignal}
-            onValueChange={(y) => {
-              setPlanStartYear(y);
-              setSpotYear((s) => (s < y ? y : s));
-              setRecurrentStartYear((r) => (r < y ? y : r));
-            }}
+            onValueChange={setPlanStartYear}
           />
           <YearInput
             id="spot-year"
             label="Année investissement spot"
             value={spotYear}
-            min={planStartYear}
+            min={1990}
             max={2200}
             commitSignal={commitSignal}
             onValueChange={setSpotYear}
@@ -501,7 +497,7 @@ export default function App() {
             id="recurrent-start-year"
             label="Année démarrage récurrent"
             value={recurrentStartYear}
-            min={planStartYear}
+            min={1990}
             max={2200}
             commitSignal={commitSignal}
             onValueChange={setRecurrentStartYear}
@@ -552,12 +548,18 @@ export default function App() {
             réaliste sur plusieurs décennies.
           </p>
         )}
+        {(spotYear < planStartYear || recurrentStartYear < planStartYear) && (
+          <p className="yellow small" id="year-order-warn">
+            Attention : spot ou récurrent avant le démarrage du plan — la simulation calera
+            automatiquement ces années sur {planStartYear}.
+          </p>
+        )}
         <p className="small muted">
           Calendrier : apport initial en {planStartYear} → investissement spot en {spotYear} →
           apports mensuels dès {recurrentStartYear} · horizon {years} ans (fin{' '}
-          {planStartYear + years}). Saisir l’année puis Tab / Entrée pour valider. L’allocation
-          actions porte sur l’investissement spot. Les rendements titres affichés sont historiques
-          observés, jamais inventés.
+          {planStartYear + years}). Chaque année est indépendante (− / + ou saisie puis Tab).
+          L’allocation actions porte sur l’investissement spot. Les rendements titres sont
+          historiques observés, jamais inventés.
         </p>
         <div className="toolbar">
           <button type="button" id="export-decisions" onClick={() => exportKind('decisions')}>

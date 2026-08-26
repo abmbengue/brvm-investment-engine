@@ -1,7 +1,13 @@
 # VERSION.md
 
-- **Version** : 7.6.1
+- **Version** : 7.6.2
 - **Date** : 2026-08-26
+
+## 7.6.2
+
+- Les 3 années (plan / spot / récurrent) sont **indépendantes** (plus de forçage mutuel)
+- Boutons − / + sur chaque année
+- Avertissement si spot/récurrent &lt; démarrage plan (calage en simulation uniquement)
 
 ## 7.6.1
 
