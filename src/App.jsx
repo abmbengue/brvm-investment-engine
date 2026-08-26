@@ -1,6 +1,6 @@
 import { useMemo, useState, useCallback, useEffect } from 'react';
 import MoneyInput from './components/MoneyInput.jsx';
-import YearInput from './components/YearInput.jsx';
+import YearSelect from './components/YearSelect.jsx';
 import UserGuide from './components/UserGuide.jsx';
 import { formatMoneyLabel } from './lib/money.js';
 import { loadUserSettings, saveUserSettings, resetUserSettings } from './lib/userSettings.js';
@@ -17,9 +17,12 @@ import { loadBundledAnnualHistory } from './data/historical/HistoricalMarketData
 import { getCompanyName } from './data/companyNames.js';
 import './App.css';
 
-const VERSION = '7.6.2';
+const VERSION = '7.6.3';
 const SAMPLE_CSV_URL = `${import.meta.env.BASE_URL}sample-brvm.csv`;
 const ANNUAL_HISTORY_URL = `${import.meta.env.BASE_URL}data/BRVM_HISTORICAL_2006_2025_ANNUAL.csv`;
+const YEAR_SELECT_MIN = 2000;
+const YEAR_SELECT_MAX = 2100;
+const DURATION_MAX = 100;
 const EMPTY_HOLDING = () => ({
   id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
   symbol: '',
@@ -475,41 +478,36 @@ export default function App() {
             onValueChange={setMonthly}
             commitSignal={commitSignal}
           />
-          <YearInput
+          <YearSelect
             id="plan-start-year"
             label="Année démarrage du plan"
             value={planStartYear}
-            min={1990}
-            max={2200}
-            commitSignal={commitSignal}
+            min={YEAR_SELECT_MIN}
+            max={YEAR_SELECT_MAX}
             onValueChange={setPlanStartYear}
           />
-          <YearInput
+          <YearSelect
             id="spot-year"
             label="Année investissement spot"
             value={spotYear}
-            min={1990}
-            max={2200}
-            commitSignal={commitSignal}
+            min={YEAR_SELECT_MIN}
+            max={YEAR_SELECT_MAX}
             onValueChange={setSpotYear}
           />
-          <YearInput
+          <YearSelect
             id="recurrent-start-year"
             label="Année démarrage récurrent"
             value={recurrentStartYear}
-            min={1990}
-            max={2200}
-            commitSignal={commitSignal}
+            min={YEAR_SELECT_MIN}
+            max={YEAR_SELECT_MAX}
             onValueChange={setRecurrentStartYear}
           />
-          <YearInput
+          <YearSelect
             id="years"
-            label="Durée (ans, sans plafond)"
+            label="Durée (ans)"
             value={years}
             min={1}
-            max={200}
-            maxLength={3}
-            commitSignal={commitSignal}
+            max={DURATION_MAX}
             onValueChange={setYears}
           />
           <label className="field">
@@ -557,7 +555,7 @@ export default function App() {
         <p className="small muted">
           Calendrier : apport initial en {planStartYear} → investissement spot en {spotYear} →
           apports mensuels dès {recurrentStartYear} · horizon {years} ans (fin{' '}
-          {planStartYear + years}). Chaque année est indépendante (− / + ou saisie puis Tab).
+          {planStartYear + years}). Choisissez chaque année dans son menu déroulant (indépendant).
           L’allocation actions porte sur l’investissement spot. Les rendements titres sont
           historiques observés, jamais inventés.
         </p>

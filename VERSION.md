@@ -1,7 +1,12 @@
 # VERSION.md
 
-- **Version** : 7.6.2
+- **Version** : 7.6.3
 - **Date** : 2026-08-26
+
+## 7.6.3
+
+- Années plan / spot / récurrent / durée en **menus déroulants** indépendants
+- Plus de saisie libre (évite le blocage spot/récurrent)
 
 ## 7.6.2
 
