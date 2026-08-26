@@ -58,7 +58,14 @@ export function runEngine({
   });
 
   const rows = csvResult?.ok ? csvResult.rows : [];
-  const features = rows.length ? buildFeatures(rows) : [];
+  const asOf =
+    csvResult?.meta?.asOf ||
+    (rows.length
+      ? [...rows].map((r) => r.date).filter(Boolean).sort().at(-1)
+      : null);
+  const features = rows.length
+    ? buildFeatures(rows, { asOf, maxPriceAgeDays: 3 })
+    : [];
   const ranked = features.length ? rankUniverse(features) : [];
   const qualityGate = evaluateQualityGate({
     csvResult,
@@ -213,6 +220,6 @@ export function runEngine({
     liveStatusMessage: csvResult?.meta?.live
       ? `LIVE — ${csvResult.meta.sourceLabel}`
       : 'Pas de LIVE BRVM — données historiques jusqu’à J-1.',
-    engineVersion: '7.7.1',
+    engineVersion: '7.7.2',
   };
 }

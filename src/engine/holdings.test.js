@@ -1,7 +1,93 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeHoldings, markHoldings } from './holdings.js';
+import {
+  normalizeHoldings,
+  markHoldings,
+  resolveRecentClose,
+  calendarAgeDays,
+  MARKET_PRICE_MAX_AGE_DAYS,
+} from './holdings.js';
 import { allocate, selectPortfolio } from './portfolio.js';
 import { runEngine } from './pipeline.js';
+import { buildFeatures } from './features.js';
+
+describe('resolveRecentClose', () => {
+  const series = [
+    { date: '2026-08-20', close: 100 },
+    { date: '2026-08-22', close: 110 },
+    { date: '2026-08-24', close: 120 },
+    { date: '2026-08-25', close: 125 },
+  ];
+
+  it('picks most recent close within 3 days of asOf', () => {
+    const q = resolveRecentClose(series, '2026-08-25', 3);
+    expect(q.fresh).toBe(true);
+    expect(q.price).toBe(125);
+    expect(q.priceDate).toBe('2026-08-25');
+    expect(q.ageDays).toBe(0);
+  });
+
+  it('accepts a close up to 3 days old', () => {
+    const q = resolveRecentClose(
+      [
+        { date: '2026-08-20', close: 100 },
+        { date: '2026-08-22', close: 110 },
+      ],
+      '2026-08-25',
+      3
+    );
+    expect(q.fresh).toBe(true);
+    expect(q.price).toBe(110);
+    expect(q.ageDays).toBe(3);
+  });
+
+  it('rejects stale closes beyond 3 days', () => {
+    const q = resolveRecentClose(
+      [
+        { date: '2026-08-10', close: 90 },
+        { date: '2026-08-15', close: 95 },
+      ],
+      '2026-08-25',
+      3
+    );
+    expect(q.fresh).toBe(false);
+    expect(q.price).toBeNull();
+    expect(q.reason).toBe('STALE');
+    expect(q.ageDays).toBeGreaterThan(MARKET_PRICE_MAX_AGE_DAYS);
+  });
+
+  it('ignores bars after asOf', () => {
+    const q = resolveRecentClose(
+      [
+        { date: '2026-08-24', close: 120 },
+        { date: '2026-08-26', close: 999 },
+      ],
+      '2026-08-25',
+      3
+    );
+    expect(q.price).toBe(120);
+  });
+
+  it('calendarAgeDays works', () => {
+    expect(calendarAgeDays('2026-08-22', '2026-08-25')).toBe(3);
+  });
+});
+
+describe('buildFeatures price freshness', () => {
+  it('nulls price when last bar is stale vs asOf', () => {
+    const rows = [
+      { date: '2026-08-01', symbol: 'OLD', close: 50, volume: 10 },
+      { date: '2026-08-25', symbol: 'NEW', close: 80, volume: 10 },
+      { date: '2026-08-24', symbol: 'NEW', close: 79, volume: 10 },
+    ];
+    const feats = buildFeatures(rows, { asOf: '2026-08-25', maxPriceAgeDays: 3 });
+    const old = feats.find((f) => f.symbol === 'OLD');
+    const neu = feats.find((f) => f.symbol === 'NEW');
+    expect(old.price).toBeNull();
+    expect(old.priceFresh).toBe(false);
+    expect(neu.price).toBe(80);
+    expect(neu.priceFresh).toBe(true);
+  });
+});
 
 describe('holdings', () => {
   it('merges duplicate symbols', () => {
@@ -25,6 +111,20 @@ describe('holdings', () => {
     const missing = markHoldings([{ symbol: 'XXXX', shares: 1, avgCost: 10 }], new Map());
     expect(missing.positions[0].priced).toBe(false);
     expect(missing.marketValue).toBe(0);
+  });
+
+  it('rejects stale price entries for holdings MTM', () => {
+    const marked = markHoldings(
+      [{ symbol: 'SNTS', shares: 10, avgCost: 1000 }],
+      new Map([
+        [
+          'SNTS',
+          { price: 1500, priceDate: '2026-08-01', ageDays: 20, fresh: false, reason: 'STALE' },
+        ],
+      ])
+    );
+    expect(marked.positions[0].priced).toBe(false);
+    expect(marked.marketValue).toBe(0);
   });
 });
 

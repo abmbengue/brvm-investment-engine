@@ -19,7 +19,7 @@ import './App.css';
 
 const ChartsPanel = lazy(() => import('./components/ChartsPanel.jsx'));
 
-const VERSION = '7.7.1';
+const VERSION = '7.7.2';
 const SAMPLE_CSV_URL = `${import.meta.env.BASE_URL}sample-brvm.csv`;
 const ANNUAL_HISTORY_URL = `${import.meta.env.BASE_URL}data/BRVM_HISTORICAL_2006_2025_ANNUAL.csv`;
 const YEAR_SELECT_MIN = 2000;
@@ -579,8 +579,9 @@ export default function App() {
         <h2>Portefeuille déjà acheté</h2>
         <p className="muted small">
           Saisissez les titres que vous détenez déjà (symbole BRVM, quantité, prix d’achat moyen
-          optionnel). La valorisation utilise le dernier cours disponible dans les données — jamais
-          inventé.
+          optionnel). La valorisation utilise le <b>cours le plus récent</b> disponible dans les
+          données, dans une fenêtre de <b>3 jours</b> autour de l’asOf (J-1) — jamais inventé. Au-delà
+          de 3 jours : prix N/D (périmé).
         </p>
         <div className="table-scroll">
           <table className="holdings-input-table">
@@ -672,7 +673,8 @@ export default function App() {
                 <tr>
                   <th>Titre</th>
                   <th>Qté</th>
-                  <th>Cours</th>
+                  <th>Cours (≤3j)</th>
+                  <th>Date cours</th>
                   <th>Valorisation</th>
                   <th>P&amp;L</th>
                 </tr>
@@ -685,7 +687,22 @@ export default function App() {
                       <div className="small muted">{getCompanyName(p.symbol)}</div>
                     </td>
                     <td>{p.shares}</td>
-                    <td>{p.priced ? formatMoneyLabel(p.price) : 'prix N/D'}</td>
+                    <td>
+                      {p.priced ? (
+                        formatMoneyLabel(p.price)
+                      ) : (
+                        <span className="yellow">
+                          prix N/D
+                          {p.priceReason === 'STALE'
+                            ? ` (>${p.priceAgeDays ?? '?'}j)`
+                            : ''}
+                        </span>
+                      )}
+                    </td>
+                    <td className="small muted">
+                      {p.priceDate || '—'}
+                      {p.priced && p.priceAgeDays != null ? ` · J-${p.priceAgeDays}` : ''}
+                    </td>
                     <td>{p.marketValue != null ? formatMoneyLabel(p.marketValue) : '—'}</td>
                     <td className={p.pnl == null ? '' : p.pnl >= 0 ? 'green' : 'red'}>
                       {p.pnl == null ? '—' : formatMoneyLabel(p.pnl)}

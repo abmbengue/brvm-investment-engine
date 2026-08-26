@@ -1,7 +1,13 @@
 # VERSION.md
 
-- **Version** : 7.7.1
+- **Version** : 7.7.2
 - **Date** : 2026-08-26
+
+## 7.7.2
+
+- Cours portefeuille = **close le plus récent ≤ asOf (J-1) et ≤ 3 jours**
+- Au-delà de 3 jours : prix N/D (périmé), jamais de cours inventé
+- Affichage date du cours + âge (J-n) dans le portefeuille détenu
 
 ## 7.7.1
 

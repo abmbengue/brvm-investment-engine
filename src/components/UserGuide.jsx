@@ -41,8 +41,9 @@ export default function UserGuide({ open, onClose }) {
           <section>
             <h3>3. Déclarer ses holdings</h3>
             <p>
-              Symbole BRVM, quantité, prix moyen optionnel. La valorisation utilise le dernier cours
-              disponible dans les données — jamais inventé. Si prix N/D, le titre reste non valorisé.
+              Symbole BRVM, quantité, prix moyen optionnel. La valorisation utilise le{' '}
+              <b>cours marché le plus récent</b> dans une fenêtre de <b>3 jours</b> autour de l’asOf
+              (J-1) — jamais inventé. Si le dernier close est trop ancien : prix N/D.
             </p>
           </section>
           <section>
