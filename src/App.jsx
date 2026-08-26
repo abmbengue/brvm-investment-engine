@@ -1,13 +1,21 @@
 import { useMemo, useState, useCallback, useEffect } from 'react';
 import MoneyInput from './components/MoneyInput.jsx';
+import UserGuide from './components/UserGuide.jsx';
 import { formatMoneyLabel } from './lib/money.js';
+import { loadUserSettings, saveUserSettings, resetUserSettings } from './lib/userSettings.js';
+import { exportAnalysisCsv, downloadTextFile } from './lib/exportAnalysis.js';
 import { runEngine } from './engine/pipeline.js';
 import { RISK_PROFILES } from './engine/profiles.js';
-import { loadMarketData, loadFromCsvText, refreshInternalHistoricalDb } from './data/loadMarketData.js';
+import {
+  loadMarketData,
+  previewCsvText,
+  commitCsvImport,
+  refreshInternalHistoricalDb,
+} from './data/loadMarketData.js';
 import { loadBundledAnnualHistory } from './data/historical/HistoricalMarketData.js';
 import './App.css';
 
-const VERSION = '7.4.1';
+const VERSION = '7.5.0';
 const SAMPLE_CSV_URL = `${import.meta.env.BASE_URL}sample-brvm.csv`;
 const ANNUAL_HISTORY_URL = `${import.meta.env.BASE_URL}data/BRVM_HISTORICAL_2006_2025_ANNUAL.csv`;
 const EMPTY_HOLDING = () => ({
@@ -42,12 +50,44 @@ function dataStatusBadge(mode, live) {
   return { label: mode === 'BLOCKED' ? 'BLOCKED' : 'NONE', className: 'status-blocked' };
 }
 
+function actionCountChips(decisions) {
+  const counts = {};
+  for (const d of decisions || []) {
+    const a = d.action || '—';
+    counts[a] = (counts[a] || 0) + 1;
+  }
+  return Object.entries(counts);
+}
+
+function csvPreviewSummary(loaded) {
+  const compat = loaded?.csvCompat || {};
+  const rows = loaded?.rows || compat.rows || [];
+  const dates = rows.map((r) => r.date).filter(Boolean).sort();
+  const summary = compat.summary || {};
+  return {
+    valid: summary.validRows ?? compat.importedRows ?? rows.length,
+    rejected: summary.rejectedRows ?? compat.rejectedRows ?? 0,
+    duplicates: summary.duplicatesRemoved ?? compat.duplicatesRemoved ?? 0,
+    dateMin: summary.dateMin ?? dates[0] ?? null,
+    dateMax: summary.dateMax ?? dates[dates.length - 1] ?? null,
+    symbols: loaded?.meta?.symbols || compat.symbols || [],
+    ok: Boolean(loaded?.ok ?? compat.ok),
+    errors: loaded?.errors || compat.errors || [],
+  };
+}
+
 export default function App() {
-  const [capital, setCapital] = useState(5_000_000);
-  const [monthly, setMonthly] = useState(500_000);
-  const [years, setYears] = useState(25);
-  const [rate, setRate] = useState(9);
-  const [profileId, setProfileId] = useState('equilibre');
+  const initial = loadUserSettings();
+  const [capital, setCapital] = useState(initial.capital);
+  const [monthly, setMonthly] = useState(initial.monthly);
+  const [years, setYears] = useState(initial.years);
+  const [rate, setRate] = useState(initial.rate);
+  const [profileId, setProfileId] = useState(initial.profileId);
+  const [holdingRows, setHoldingRows] = useState(initial.holdingRows);
+  const [settingsSavedAt, setSettingsSavedAt] = useState(initial.updatedAt);
+  const [guideOpen, setGuideOpen] = useState(false);
+  const [csvPreview, setCsvPreview] = useState(null);
+  const [dataLoading, setDataLoading] = useState(false);
   const [csvResult, setCsvResult] = useState(null);
   const [csvMessage, setCsvMessage] = useState('Chargement historique jusqu’à J-1…');
   const [dataSource, setDataSource] = useState('NONE');
@@ -55,7 +95,6 @@ export default function App() {
     'Pas de LIVE BRVM — données historiques disponibles jusqu’à J-1.'
   );
   const [commitSignal, setCommitSignal] = useState(0);
-  const [holdingRows, setHoldingRows] = useState([EMPTY_HOLDING()]);
   const [annualHistory, setAnnualHistory] = useState(null);
 
   const holdingsInput = useMemo(
@@ -69,6 +108,11 @@ export default function App() {
         .filter((r) => String(r.symbol || '').trim() && Number(r.shares) > 0),
     [holdingRows]
   );
+
+  useEffect(() => {
+    const saved = saveUserSettings({ capital, monthly, years, rate, profileId, holdingRows });
+    setSettingsSavedAt(saved.updatedAt);
+  }, [capital, monthly, years, rate, profileId, holdingRows]);
 
   const applyProviderResult = useCallback((loaded) => {
     const compat = loaded.csvCompat;
@@ -90,20 +134,31 @@ export default function App() {
   }, []);
 
   const loadSample = useCallback(async () => {
+    setDataLoading(true);
     setCsvMessage('Chargement SAMPLE…');
-    const loaded = await loadMarketData({ sampleUrl: SAMPLE_CSV_URL, preferSample: true });
-    return applyProviderResult(loaded);
+    try {
+      const loaded = await loadMarketData({ sampleUrl: SAMPLE_CSV_URL, preferSample: true });
+      return applyProviderResult(loaded);
+    } finally {
+      setDataLoading(false);
+    }
   }, [applyProviderResult]);
 
   const refreshHistorical = useCallback(async () => {
+    setDataLoading(true);
     setCsvMessage('Construction / mise à jour de la base interne historique…');
-    const loaded = await refreshInternalHistoricalDb();
-    return applyProviderResult(loaded);
+    try {
+      const loaded = await refreshInternalHistoricalDb();
+      return applyProviderResult(loaded);
+    } finally {
+      setDataLoading(false);
+    }
   }, [applyProviderResult]);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      setDataLoading(true);
       try {
         setCsvMessage('Initialisation historique complet jusqu’à J-1…');
         const loaded = await loadMarketData({ sampleUrl: SAMPLE_CSV_URL });
@@ -120,6 +175,8 @@ export default function App() {
             /* ignore */
           }
         }
+      } finally {
+        if (!cancelled) setDataLoading(false);
       }
     })();
     return () => {
@@ -164,23 +221,75 @@ export default function App() {
   async function onCsvFile(file) {
     if (!file) return;
     const text = await file.text();
-    const loaded = await loadFromCsvText(text);
-    applyProviderResult(loaded);
+    setCsvMessage('Prévisualisation CSV…');
+    const loaded = await previewCsvText(text);
+    setCsvPreview({ text, loaded });
+    setCsvMessage(loaded.liveStatusMessage || 'CSV en prévisualisation.');
+  }
+
+  async function confirmCsvMerge() {
+    if (!csvPreview?.text) return;
+    setDataLoading(true);
+    setCsvMessage('Fusion CSV dans la base interne…');
+    try {
+      const loaded = await commitCsvImport(csvPreview.text, { mergeIntoInternal: true });
+      applyProviderResult(loaded);
+      setCsvPreview(null);
+    } catch (e) {
+      setCsvMessage(`Fusion CSV : ${e.message}`);
+    } finally {
+      setDataLoading(false);
+    }
+  }
+
+  function cancelCsvPreview() {
+    setCsvPreview(null);
+    setCsvMessage('Prévisualisation annulée — aucune fusion.');
+  }
+
+  function resetParams() {
+    if (
+      !window.confirm(
+        'Réinitialiser vos paramètres (capital, apports, horizon, profil, holdings) ?\nLa base marché INTERNAL n’est PAS effacée.'
+      )
+    ) {
+      return;
+    }
+    const fresh = resetUserSettings();
+    setCapital(fresh.capital);
+    setMonthly(fresh.monthly);
+    setYears(fresh.years);
+    setRate(fresh.rate);
+    setProfileId(fresh.profileId);
+    setHoldingRows(fresh.holdingRows);
+    setSettingsSavedAt(fresh.updatedAt);
+  }
+
+  function exportKind(kind) {
+    const { csv, filename } = exportAnalysisCsv(result, kind);
+    downloadTextFile(filename, csv);
   }
 
   const badge = dataStatusBadge(result.dataStatus.mode || dataSource, result.dataStatus.live);
+  const asOf = result.dataStatus.asOf || '—';
+  const previewSummary = csvPreview ? csvPreviewSummary(csvPreview.loaded) : null;
+  const actionChips = actionCountChips(result.decisions);
+  const hasDecisions = (result.decisions || []).length > 0;
+  const exploratoryMetrics = result.backtest?.metrics && !result.backtest?.validated;
 
   return (
     <main className="app">
+      <UserGuide open={guideOpen} onClose={() => setGuideOpen(false)} />
+
       <section className="hero">
         <h1>BRVM INVESTMENT ENGINE — V{VERSION}</h1>
         <p className="muted">
           Moteur opérationnel : DATA → PREDICTOR → PORTFOLIO → ALLOCATION → STRESS → DECISION →
           BACKTEST → AUDIT. Simulation ≠ garantie. Aucun ordre réel. Aucun flux live inventé.
         </p>
-        <p className="small">
+        <p className="small" id="data-status-line">
           <span id="data-status-badge" className={`data-status ${badge.className}`}>
-            DATA STATUS · {badge.label}
+            DATA STATUS · {badge.label} · asOf {asOf} · Politique J-1 · Pas LIVE BRVM
           </span>{' '}
           <span className="muted" id="live-status-msg">
             {liveStatusMessage || result.liveStatusMessage}
@@ -241,11 +350,41 @@ export default function App() {
           <button type="button" id="recalc" onClick={recalculate}>
             RECALCULER
           </button>
+          <button type="button" id="open-guide" onClick={() => setGuideOpen(true)}>
+            GUIDE
+          </button>
+          <button type="button" id="reset-settings" onClick={resetParams}>
+            RÉINITIALISER MES PARAMÈTRES
+          </button>
         </div>
+        {years > 80 && (
+          <p className="yellow small" id="years-warn">
+            Horizon très long ({years} ans) — autorisé, mais la simulation peut être lourde et peu
+            réaliste sur plusieurs décennies.
+          </p>
+        )}
         <p className="small muted">
           Spot = liquidités disponibles maintenant. Apport mensuel = versements futurs (simulation).
           Le portefeuille déjà acheté se saisit ci-dessous.
+          {settingsSavedAt ? (
+            <>
+              {' '}
+              · Paramètres enregistrés : {new Date(settingsSavedAt).toLocaleString('fr-FR')}
+            </>
+          ) : null}
+          {dataLoading ? ' · Chargement données…' : ''}
         </p>
+        <div className="toolbar">
+          <button type="button" id="export-decisions" onClick={() => exportKind('decisions')}>
+            Décisions CSV
+          </button>
+          <button type="button" id="export-allocation" onClick={() => exportKind('allocation')}>
+            Allocation CSV
+          </button>
+          <button type="button" id="export-portfolio" onClick={() => exportKind('portfolio')}>
+            Portefeuille CSV
+          </button>
+        </div>
       </section>
 
       <section className="metrics">
@@ -288,110 +427,116 @@ export default function App() {
           optionnel). La valorisation utilise le dernier cours disponible dans les données — jamais
           inventé.
         </p>
-        <table>
-          <thead>
-            <tr>
-              <th>Symbole</th>
-              <th>Quantité</th>
-              <th>Prix d’achat moyen</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {holdingRows.map((row) => (
-              <tr key={row.id}>
-                <td>
-                  <input
-                    aria-label="symbole"
-                    value={row.symbol}
-                    placeholder="ex: SNTS"
-                    onChange={(e) =>
-                      setHoldingRows((rows) =>
-                        rows.map((r) =>
-                          r.id === row.id ? { ...r, symbol: e.target.value.toUpperCase() } : r
-                        )
-                      )
-                    }
-                  />
-                </td>
-                <td>
-                  <input
-                    aria-label="quantité"
-                    inputMode="numeric"
-                    value={row.shares}
-                    placeholder="0"
-                    onChange={(e) =>
-                      setHoldingRows((rows) =>
-                        rows.map((r) =>
-                          r.id === row.id ? { ...r, shares: e.target.value.replace(/[^\d]/g, '') } : r
-                        )
-                      )
-                    }
-                  />
-                </td>
-                <td>
-                  <input
-                    aria-label="prix moyen"
-                    inputMode="decimal"
-                    value={row.avgCost}
-                    placeholder="optionnel"
-                    onChange={(e) =>
-                      setHoldingRows((rows) =>
-                        rows.map((r) =>
-                          r.id === row.id
-                            ? { ...r, avgCost: e.target.value.replace(/[^\d.,]/g, '') }
-                            : r
-                        )
-                      )
-                    }
-                  />
-                </td>
-                <td>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setHoldingRows((rows) =>
-                        rows.length <= 1 ? [EMPTY_HOLDING()] : rows.filter((r) => r.id !== row.id)
-                      )
-                    }
-                  >
-                    Retirer
-                  </button>
-                </td>
+        <div className="table-scroll">
+          <table className="holdings-input-table">
+            <thead>
+              <tr>
+                <th>Symbole</th>
+                <th>Quantité</th>
+                <th>Prix d’achat moyen</th>
+                <th></th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {holdingRows.map((row) => (
+                <tr key={row.id}>
+                  <td>
+                    <input
+                      aria-label="symbole"
+                      value={row.symbol}
+                      placeholder="ex: SNTS"
+                      onChange={(e) =>
+                        setHoldingRows((rows) =>
+                          rows.map((r) =>
+                            r.id === row.id ? { ...r, symbol: e.target.value.toUpperCase() } : r
+                          )
+                        )
+                      }
+                    />
+                  </td>
+                  <td>
+                    <input
+                      aria-label="quantité"
+                      inputMode="numeric"
+                      value={row.shares}
+                      placeholder="0"
+                      onChange={(e) =>
+                        setHoldingRows((rows) =>
+                          rows.map((r) =>
+                            r.id === row.id
+                              ? { ...r, shares: e.target.value.replace(/[^\d]/g, '') }
+                              : r
+                          )
+                        )
+                      }
+                    />
+                  </td>
+                  <td>
+                    <input
+                      aria-label="prix moyen"
+                      inputMode="decimal"
+                      value={row.avgCost}
+                      placeholder="optionnel"
+                      onChange={(e) =>
+                        setHoldingRows((rows) =>
+                          rows.map((r) =>
+                            r.id === row.id
+                              ? { ...r, avgCost: e.target.value.replace(/[^\d.,]/g, '') }
+                              : r
+                          )
+                        )
+                      }
+                    />
+                  </td>
+                  <td>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setHoldingRows((rows) =>
+                          rows.length <= 1 ? [EMPTY_HOLDING()] : rows.filter((r) => r.id !== row.id)
+                        )
+                      }
+                    >
+                      Retirer
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
         <div className="toolbar">
           <button type="button" id="add-holding" onClick={() => setHoldingRows((r) => [...r, EMPTY_HOLDING()])}>
             AJOUTER UNE LIGNE
           </button>
         </div>
         {result.holdings?.positionCount > 0 ? (
-          <table>
-            <thead>
-              <tr>
-                <th>Titre</th>
-                <th>Qté</th>
-                <th>Cours</th>
-                <th>Valorisation</th>
-                <th>P&amp;L</th>
-              </tr>
-            </thead>
-            <tbody>
-              {result.holdings.positions.map((p) => (
-                <tr key={p.symbol}>
-                  <td>{p.symbol}</td>
-                  <td>{p.shares}</td>
-                  <td>{p.priced ? formatMoneyLabel(p.price) : 'prix N/D'}</td>
-                  <td>{p.marketValue != null ? formatMoneyLabel(p.marketValue) : '—'}</td>
-                  <td className={p.pnl == null ? '' : p.pnl >= 0 ? 'green' : 'red'}>
-                    {p.pnl == null ? '—' : formatMoneyLabel(p.pnl)}
-                  </td>
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Titre</th>
+                  <th>Qté</th>
+                  <th>Cours</th>
+                  <th>Valorisation</th>
+                  <th>P&amp;L</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {result.holdings.positions.map((p) => (
+                  <tr key={p.symbol}>
+                    <td>{p.symbol}</td>
+                    <td>{p.shares}</td>
+                    <td>{p.priced ? formatMoneyLabel(p.price) : 'prix N/D'}</td>
+                    <td>{p.marketValue != null ? formatMoneyLabel(p.marketValue) : '—'}</td>
+                    <td className={p.pnl == null ? '' : p.pnl >= 0 ? 'green' : 'red'}>
+                      {p.pnl == null ? '—' : formatMoneyLabel(p.pnl)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         ) : (
           <p className="yellow small">Aucune position détenue saisie.</p>
         )}
@@ -426,7 +571,9 @@ export default function App() {
             {badge.label}
           </b>
           {' — '}
-          <span id="live-flag">Flux live : <b>{result.dataStatus.live ? 'OUI' : 'NON'}</b></span>
+          <span id="live-flag">
+            Flux live : <b>{result.dataStatus.live ? 'OUI' : 'NON'}</b>
+          </span>
           {' — '}
           <span id="asof-flag">
             asOf : <b>{result.dataStatus.asOf || '—'}</b> (politique J-1, pas LIVE BRVM)
@@ -443,6 +590,7 @@ export default function App() {
           <button
             type="button"
             id="load-sample"
+            disabled={dataLoading}
             onClick={() => loadSample().catch((e) => setCsvMessage(`SAMPLE : ${e.message}`))}
           >
             CHARGER SAMPLE
@@ -450,6 +598,7 @@ export default function App() {
           <button
             type="button"
             id="refresh-historical"
+            disabled={dataLoading}
             onClick={() =>
               refreshHistorical().catch((e) => setCsvMessage(`Base historique : ${e.message}`))
             }
@@ -461,6 +610,39 @@ export default function App() {
           </a>
         </div>
         <p id="csv-status">{csvMessage}</p>
+        {csvPreview && previewSummary && (
+          <div className="csv-preview" id="csv-preview-panel">
+            <h3>Prévisualisation CSV — confirmation requise</h3>
+            <p className="small">
+              Lignes valides : <b>{previewSummary.valid}</b> · Rejetées :{' '}
+              <b>{previewSummary.rejected}</b> · Doublons : <b>{previewSummary.duplicates}</b>
+            </p>
+            <p className="small">
+              Période : <b>{previewSummary.dateMin || '—'}</b> → <b>{previewSummary.dateMax || '—'}</b>{' '}
+              · Titres : <b>{previewSummary.symbols.length}</b>
+              {previewSummary.symbols.length ? (
+                <> ({previewSummary.symbols.slice(0, 12).join(', ')}
+                {previewSummary.symbols.length > 12 ? '…' : ''})</>
+              ) : null}
+            </p>
+            {previewSummary.errors?.length > 0 && (
+              <p className="small red">{previewSummary.errors.slice(0, 3).join(' · ')}</p>
+            )}
+            <div className="toolbar">
+              <button
+                type="button"
+                id="csv-confirm-merge"
+                disabled={!previewSummary.ok || dataLoading}
+                onClick={() => confirmCsvMerge()}
+              >
+                CONFIRMER FUSION
+              </button>
+              <button type="button" id="csv-cancel-preview" onClick={cancelCsvPreview}>
+                ANNULER
+              </button>
+            </div>
+          </div>
+        )}
         {csvResult?.warnings?.length > 0 && (
           <p className="small yellow">
             Avertissements : {csvResult.warnings.slice(0, 5).join(' · ')}
@@ -495,30 +677,32 @@ export default function App() {
             </div>
           </div>
         </div>
-        <table>
-          <thead>
-            <tr>
-              <th>Horizon</th>
-              <th>Capital versé</th>
-              <th>Prudent (5%)</th>
-              <th>Central</th>
-              <th>Dynamique (12%)</th>
-              <th>Gain (central)</th>
-            </tr>
-          </thead>
-          <tbody id="proj">
-            {result.projections.map((p) => (
-              <tr key={p.years}>
-                <td>{p.years} ans</td>
-                <td>{formatMoneyLabel(p.contributed)}</td>
-                <td>{formatMoneyLabel(p.prudent)}</td>
-                <td>{formatMoneyLabel(p.central)}</td>
-                <td>{formatMoneyLabel(p.dynamic)}</td>
-                <td>{formatMoneyLabel(p.gainCentral)}</td>
+        <div className="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Horizon</th>
+                <th>Capital versé</th>
+                <th>Prudent (5%)</th>
+                <th>Central</th>
+                <th>Dynamique (12%)</th>
+                <th>Gain (central)</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody id="proj">
+              {result.projections.map((p) => (
+                <tr key={p.years}>
+                  <td>{p.years} ans</td>
+                  <td>{formatMoneyLabel(p.contributed)}</td>
+                  <td>{formatMoneyLabel(p.prudent)}</td>
+                  <td>{formatMoneyLabel(p.central)}</td>
+                  <td>{formatMoneyLabel(p.dynamic)}</td>
+                  <td>{formatMoneyLabel(p.gainCentral)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <section className="grid">
@@ -528,30 +712,36 @@ export default function App() {
           {result.ranked.length === 0 ? (
             <p className="yellow">Aucun score — importez des données.</p>
           ) : (
-            <table>
-              <thead>
-                <tr>
-                  <th>Titre</th>
-                  <th>Score</th>
-                  <th>+</th>
-                  <th>−</th>
-                  <th>Data</th>
-                  <th>Conf.</th>
-                </tr>
-              </thead>
-              <tbody>
-                {result.ranked.slice(0, 10).map((r) => (
-                  <tr key={r.symbol}>
-                    <td>{r.symbol}</td>
-                    <td>{r.score}</td>
-                    <td className="small">{r.positives.slice(0, 2).join(', ') || '—'}</td>
-                    <td className="small">{r.negatives.slice(0, 2).join(', ') || '—'}</td>
-                    <td>{Math.round(r.dataQuality * 100)}%</td>
-                    <td>{Math.round(r.confidence * 100)}%</td>
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Titre</th>
+                    <th>Score</th>
+                    <th>+</th>
+                    <th>−</th>
+                    <th>Data</th>
+                    <th>Conf.</th>
+                    <th>Qualité</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {result.ranked.slice(0, 10).map((r) => (
+                    <tr key={r.symbol}>
+                      <td>{r.symbol}</td>
+                      <td>{r.score}</td>
+                      <td className="small">{r.positives.slice(0, 2).join(', ') || '—'}</td>
+                      <td className="small">{r.negatives.slice(0, 2).join(', ') || '—'}</td>
+                      <td>{Math.round(r.dataQuality * 100)}%</td>
+                      <td>{Math.round(r.confidence * 100)}%</td>
+                      <td className={qualityClass(r.qualityLabel)}>
+                        {r.qualityLabel || '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
 
@@ -564,38 +754,60 @@ export default function App() {
             <b>{formatMoneyLabel(result.allocation.existingMarketValue)}</b> · Concentration :{' '}
             <b>{pct(result.allocation.concentration)}</b>
           </p>
+          {(result.allocation.targetWeightSum != null ||
+            result.allocation.maxWeightRespected != null) && (
+            <p className="small muted">
+              Somme poids cibles :{' '}
+              <b>
+                {result.allocation.targetWeightSum != null
+                  ? pct(result.allocation.targetWeightSum)
+                  : '—'}
+              </b>
+              {' · '}
+              Plafond poids :{' '}
+              <b className={result.allocation.maxWeightRespected === false ? 'red' : 'green'}>
+                {result.allocation.maxWeightRespected == null
+                  ? '—'
+                  : result.allocation.maxWeightRespected
+                    ? 'respecté'
+                    : 'dépassé'}
+              </b>
+            </p>
+          )}
           {result.allocation.positions.length === 0 ? (
             <p className="yellow">Aucune allocation — gate ou filtres.</p>
           ) : (
-            <table>
-              <thead>
-                <tr>
-                  <th>Titre</th>
-                  <th>Score</th>
-                  <th>Détenu</th>
-                  <th>Achat spot</th>
-                  <th>Total</th>
-                  <th>Poids</th>
-                  <th>Montant</th>
-                </tr>
-              </thead>
-              <tbody>
-                {result.allocation.positions.map((p) => (
-                  <tr key={p.symbol}>
-                    <td>
-                      {p.symbol}
-                      {p.alreadyHeld ? ' · détenu' : ''}
-                    </td>
-                    <td>{p.score ?? '—'}</td>
-                    <td>{p.existingShares || 0}</td>
-                    <td>{p.buyShares || 0}</td>
-                    <td>{p.shares}</td>
-                    <td>{p.weightPct}%</td>
-                    <td>{formatMoneyLabel(p.amount)}</td>
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Titre</th>
+                    <th>Score</th>
+                    <th>Détenu</th>
+                    <th>Achat spot</th>
+                    <th>Total</th>
+                    <th>Poids</th>
+                    <th>Montant</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {result.allocation.positions.map((p) => (
+                    <tr key={p.symbol}>
+                      <td>
+                        {p.symbol}
+                        {p.alreadyHeld ? ' · détenu' : ''}
+                      </td>
+                      <td>{p.score ?? '—'}</td>
+                      <td>{p.existingShares || 0}</td>
+                      <td>{p.buyShares || 0}</td>
+                      <td>{p.shares}</td>
+                      <td>{p.weightPct}%</td>
+                      <td>{formatMoneyLabel(p.amount)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       </section>
@@ -603,85 +815,171 @@ export default function App() {
       <section className="grid">
         <div className="panel">
           <h2>Stress</h2>
-          <table>
-            <thead>
-              <tr>
-                <th>Scénario</th>
-                <th>Capital choqué</th>
-                <th>Projection</th>
-                <th>Échelle position</th>
-                <th>Note</th>
-              </tr>
-            </thead>
-            <tbody>
-              {result.stress.map((s) => (
-                <tr key={s.id}>
-                  <td>{s.label}</td>
-                  <td>{formatMoneyLabel(s.shockedCapital)}</td>
-                  <td>{formatMoneyLabel(s.futureValue)}</td>
-                  <td>{s.recommendedPositionScale}</td>
-                  <td className="small">{s.note}</td>
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Scénario</th>
+                  <th>Capital choqué</th>
+                  <th>Projection</th>
+                  <th>Échelle position</th>
+                  <th>Note</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {result.stress.map((s) => (
+                  <tr key={s.id}>
+                    <td>{s.label}</td>
+                    <td>{formatMoneyLabel(s.shockedCapital)}</td>
+                    <td>{formatMoneyLabel(s.futureValue)}</td>
+                    <td>{s.recommendedPositionScale}</td>
+                    <td className="small">{s.note}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
 
         <div className="panel">
           <h2>Decision Center</h2>
+          <p className="small muted">
+            Décision analytique — ne constitue pas un ordre de bourse.
+          </p>
           {result.qualityGate.status === 'BLOCKED' && (
             <div className="danger">BLOCKED — aucune recommandation ferme.</div>
           )}
-          <table>
-            <thead>
-              <tr>
-                <th>Titre</th>
-                <th>Action</th>
-                <th>Score</th>
-                <th>Risque</th>
-                <th>Justification</th>
-                <th>Invalidation</th>
-                <th>Data</th>
-              </tr>
-            </thead>
-            <tbody>
-              {result.decisions.map((d, i) => (
-                <tr key={`${d.symbol}-${i}`}>
-                  <td>{d.symbol}</td>
-                  <td>
-                    <b
-                      className={
-                        d.action === 'BUY' || d.action === 'ADD'
-                          ? 'green'
-                          : d.action === 'EXIT' || d.action === 'REDUCE'
-                            ? 'red'
-                            : 'yellow'
-                      }
-                    >
-                      {d.action}
-                    </b>
-                  </td>
-                  <td>{d.score ?? '—'}</td>
-                  <td>{d.risk}</td>
-                  <td className="small">{d.justification}</td>
-                  <td className="small">{d.invalidation}</td>
-                  <td>{d.dataQuality != null ? `${Math.round(d.dataQuality * 100)}%` : '—'}</td>
-                </tr>
+          {actionChips.length > 0 && (
+            <div className="chips" id="decision-action-chips">
+              {actionChips.map(([action, n]) => (
+                <span key={action} className="chip">
+                  {action} · {n}
+                </span>
               ))}
-            </tbody>
-          </table>
+            </div>
+          )}
+          {!hasDecisions ? (
+            <p className="yellow small">Aucune décision — importez des données ou assouplissez les filtres.</p>
+          ) : (
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Titre</th>
+                    <th>Action</th>
+                    <th>Score</th>
+                    <th>Conf.</th>
+                    <th>Poids actuel</th>
+                    <th>Poids cible</th>
+                    <th>Écart</th>
+                    <th>Risque</th>
+                    <th>Justification</th>
+                    <th>Invalidation</th>
+                    <th>Data</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {result.decisions.map((d, i) => (
+                    <tr key={`${d.symbol}-${i}`}>
+                      <td>{d.symbol}</td>
+                      <td>
+                        <b
+                          className={
+                            d.action === 'BUY' || d.action === 'ADD'
+                              ? 'green'
+                              : d.action === 'EXIT' || d.action === 'REDUCE'
+                                ? 'red'
+                                : 'yellow'
+                          }
+                        >
+                          {d.action}
+                        </b>
+                      </td>
+                      <td>{d.score ?? '—'}</td>
+                      <td>
+                        {d.confidence != null ? `${Math.round(d.confidence * 100)}%` : '—'}
+                      </td>
+                      <td>
+                        {d.currentWeightPct != null ? `${d.currentWeightPct}%` : '—'}
+                      </td>
+                      <td>
+                        {d.targetWeightPct != null ? `${d.targetWeightPct}%` : '—'}
+                      </td>
+                      <td>
+                        {d.weightGapPct != null
+                          ? `${d.weightGapPct > 0 ? '+' : ''}${d.weightGapPct}%`
+                          : '—'}
+                      </td>
+                      <td>{d.risk}</td>
+                      <td className="small">{d.justification}</td>
+                      <td className="small">{d.invalidation}</td>
+                      <td>{d.dataQuality != null ? `${Math.round(d.dataQuality * 100)}%` : '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </section>
 
       <section className="panel">
         <h2>Backtest (TRAIN → VALIDATION → OUT-OF-SAMPLE)</h2>
-        <p className={result.backtest.validated ? 'green' : 'yellow'}>
+        <p className="yellow">
           <b>{result.backtest.status}</b>
         </p>
         <p className="small muted">
           L’historique annuel d’indice (PRICE_INDEX) ne valide pas un backtest titres. Schéma
-          quotidien futur requis : date,symbol,open,high,low,close,volume.
+          quotidien futur requis : date,symbol,open,high,low,close,volume. Aucun backtest titres
+          n’est présenté comme validé tant que l’historique quotidien officiel est insuffisant.
         </p>
+        {exploratoryMetrics && (
+          <div className="warn">
+            <p className="yellow small">
+              <b>Indicateurs exploratoires uniquement</b> — non validés, non exploitables pour une
+              décision d’investissement.
+            </p>
+            <p className="small muted">
+              Splits — Train : {result.backtest.splits?.train} · Val :{' '}
+              {result.backtest.splits?.validation} · OOS : {result.backtest.splits?.oos}
+            </p>
+            {result.backtest.selectedFromTrain?.length > 0 && (
+              <p className="small">
+                Sélection (train only) : {result.backtest.selectedFromTrain.join(', ')}
+              </p>
+            )}
+            <div className="table-scroll">
+              <table>
+                <tbody>
+                  <tr>
+                    <td>Rendement cumulé OOS</td>
+                    <td>{pct(result.backtest.metrics.rendementCumuleOOS)}</td>
+                  </tr>
+                  <tr>
+                    <td>Rendement annualisé OOS</td>
+                    <td>{pct(result.backtest.metrics.rendementAnnualiseOOS)}</td>
+                  </tr>
+                  <tr>
+                    <td>Volatilité</td>
+                    <td>{pct(result.backtest.metrics.volatilite)}</td>
+                  </tr>
+                  <tr>
+                    <td>Max drawdown</td>
+                    <td>{pct(result.backtest.metrics.maxDrawdown)}</td>
+                  </tr>
+                  <tr>
+                    <td>Transactions</td>
+                    <td>{result.backtest.metrics.transactions}</td>
+                  </tr>
+                  <tr>
+                    <td>Frais / dividendes / benchmark</td>
+                    <td className="muted">{result.backtest.metrics.note}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
         {result.backtest.validated && result.backtest.metrics && (
           <>
             <p className="small muted">
@@ -689,34 +987,36 @@ export default function App() {
               · OOS : {result.backtest.splits.oos}
             </p>
             <p className="small">Sélection (train only) : {result.backtest.selectedFromTrain.join(', ')}</p>
-            <table>
-              <tbody>
-                <tr>
-                  <td>Rendement cumulé OOS</td>
-                  <td>{pct(result.backtest.metrics.rendementCumuleOOS)}</td>
-                </tr>
-                <tr>
-                  <td>Rendement annualisé OOS</td>
-                  <td>{pct(result.backtest.metrics.rendementAnnualiseOOS)}</td>
-                </tr>
-                <tr>
-                  <td>Volatilité</td>
-                  <td>{pct(result.backtest.metrics.volatilite)}</td>
-                </tr>
-                <tr>
-                  <td>Max drawdown</td>
-                  <td>{pct(result.backtest.metrics.maxDrawdown)}</td>
-                </tr>
-                <tr>
-                  <td>Transactions</td>
-                  <td>{result.backtest.metrics.transactions}</td>
-                </tr>
-                <tr>
-                  <td>Frais / dividendes / benchmark</td>
-                  <td className="muted">{result.backtest.metrics.note}</td>
-                </tr>
-              </tbody>
-            </table>
+            <div className="table-scroll">
+              <table>
+                <tbody>
+                  <tr>
+                    <td>Rendement cumulé OOS</td>
+                    <td>{pct(result.backtest.metrics.rendementCumuleOOS)}</td>
+                  </tr>
+                  <tr>
+                    <td>Rendement annualisé OOS</td>
+                    <td>{pct(result.backtest.metrics.rendementAnnualiseOOS)}</td>
+                  </tr>
+                  <tr>
+                    <td>Volatilité</td>
+                    <td>{pct(result.backtest.metrics.volatilite)}</td>
+                  </tr>
+                  <tr>
+                    <td>Max drawdown</td>
+                    <td>{pct(result.backtest.metrics.maxDrawdown)}</td>
+                  </tr>
+                  <tr>
+                    <td>Transactions</td>
+                    <td>{result.backtest.metrics.transactions}</td>
+                  </tr>
+                  <tr>
+                    <td>Frais / dividendes / benchmark</td>
+                    <td className="muted">{result.backtest.metrics.note}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </>
         )}
       </section>
@@ -739,35 +1039,37 @@ export default function App() {
             <p className="yellow small">
               <b>{result.historicalMarketData.stockBacktestMessage}</b>
             </p>
-            <table>
-              <thead>
-                <tr>
-                  <th>Année</th>
-                  <th>Indice fin d’année</th>
-                  <th>Rendement</th>
-                  <th>Régime</th>
-                  <th>Qualité</th>
-                  <th>Source rendement</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(result.historicalMarketData.benchmark || []).map((b) => {
-                  const regime = (result.historicalMarketData.regimes || []).find(
-                    (r) => r.year === b.year
-                  );
-                  return (
-                    <tr key={b.year}>
-                      <td>{b.year}</td>
-                      <td>{b.indexYearEnd != null ? b.indexYearEnd.toFixed(2) : '—'}</td>
-                      <td>{pct(b.annualReturn)}</td>
-                      <td>{regime?.regime || '—'}</td>
-                      <td className={qualityClass(b.quality)}>{b.quality}</td>
-                      <td className="small muted">{b.returnSource || '—'}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Année</th>
+                    <th>Indice fin d’année</th>
+                    <th>Rendement</th>
+                    <th>Régime</th>
+                    <th>Qualité</th>
+                    <th>Source rendement</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(result.historicalMarketData.benchmark || []).map((b) => {
+                    const regime = (result.historicalMarketData.regimes || []).find(
+                      (r) => r.year === b.year
+                    );
+                    return (
+                      <tr key={b.year}>
+                        <td>{b.year}</td>
+                        <td>{b.indexYearEnd != null ? b.indexYearEnd.toFixed(2) : '—'}</td>
+                        <td>{pct(b.annualReturn)}</td>
+                        <td>{regime?.regime || '—'}</td>
+                        <td className={qualityClass(b.quality)}>{b.quality}</td>
+                        <td className="small muted">{b.returnSource || '—'}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </>
         ) : (
           <p className="yellow">Historique annuel d’indice non chargé.</p>
@@ -776,51 +1078,53 @@ export default function App() {
 
       <section className="panel">
         <h2>Audit / risques / Quality Gate</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>Contrôle</th>
-              <th>Statut</th>
-              <th>Détail</th>
-            </tr>
-          </thead>
-          <tbody>
-            {result.qualityGate.checks.map((c) => (
-              <tr key={c.id}>
-                <td>{c.id}</td>
-                <td className={gateClass(c.status)}>{c.status}</td>
-                <td>{c.detail}</td>
+        <div className="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Contrôle</th>
+                <th>Statut</th>
+                <th>Détail</th>
               </tr>
-            ))}
-            <tr>
-              <td>Risque marché</td>
-              <td>—</td>
-              <td>{result.qualityGate.risks.marche}</td>
-            </tr>
-            <tr>
-              <td>Risque titre</td>
-              <td>—</td>
-              <td>{result.qualityGate.risks.titre}</td>
-            </tr>
-            <tr>
-              <td>Risque liquidité</td>
-              <td>—</td>
-              <td>{result.qualityGate.risks.liquidite}</td>
-            </tr>
-            <tr>
-              <td>Risque données</td>
-              <td className={gateClass(result.qualityGate.status)}>
-                {result.qualityGate.risks.donnees}
-              </td>
-              <td>Quality Gate</td>
-            </tr>
-            <tr>
-              <td>Risque modèle</td>
-              <td>—</td>
-              <td>{result.qualityGate.risks.modele}</td>
-            </tr>
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {result.qualityGate.checks.map((c) => (
+                <tr key={c.id}>
+                  <td>{c.id}</td>
+                  <td className={gateClass(c.status)}>{c.status}</td>
+                  <td>{c.detail}</td>
+                </tr>
+              ))}
+              <tr>
+                <td>Risque marché</td>
+                <td>—</td>
+                <td>{result.qualityGate.risks.marche}</td>
+              </tr>
+              <tr>
+                <td>Risque titre</td>
+                <td>—</td>
+                <td>{result.qualityGate.risks.titre}</td>
+              </tr>
+              <tr>
+                <td>Risque liquidité</td>
+                <td>—</td>
+                <td>{result.qualityGate.risks.liquidite}</td>
+              </tr>
+              <tr>
+                <td>Risque données</td>
+                <td className={gateClass(result.qualityGate.status)}>
+                  {result.qualityGate.risks.donnees}
+                </td>
+                <td>Quality Gate</td>
+              </tr>
+              <tr>
+                <td>Risque modèle</td>
+                <td>—</td>
+                <td>{result.qualityGate.risks.modele}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <section className="panel">

@@ -1,7 +1,17 @@
 # VERSION.md
 
-- **Version** : 7.4.1
+- **Version** : 7.5.0
 - **Date** : 2026-08-26
+
+## 7.5.0
+
+- **Persistance** des paramètres utilisateur (capital, apports, horizon, profil, holdings) — reset sans toucher la base marché INTERNAL
+- **Export CSV** décisions / allocation / portefeuille (mode, asOf, Pas LIVE)
+- **Guide** d’utilisation in-app
+- **CSV** : prévisualisation → CONFIRMER FUSION / ANNULER (pas de merge silencieux)
+- Correctifs moteur **P0** : NaN, maxWeight, backtest non-validé, PnL signé
+- Politique data préservée : **INTERNAL J-1**, jamais LIVE BRVM
+- UI Decision Center (chips, confiance, poids actuel/cible/écart), allocation (somme cibles / plafond), predictor `qualityLabel`
 
 ## 7.4.1
 

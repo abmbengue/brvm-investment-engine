@@ -159,6 +159,7 @@ export function runEngine({
         },
     liveStatusMessage: csvResult?.meta?.live
       ? `LIVE — ${csvResult.meta.sourceLabel}`
-      : 'Données temps réel non connectées.',
+      : 'Pas de LIVE BRVM — données historiques jusqu’à J-1.',
+    engineVersion: '7.5.0',
   };
 }

@@ -101,8 +101,9 @@ export function runBacktest(rows, profileId = 'equilibre') {
     oosRet !== null && years > 0 ? Math.pow(1 + oosRet, 1 / Math.max(years, 1 / 12)) - 1 : null;
 
   return {
-    status: 'VALIDÉ (échantillon)',
-    validated: true,
+    status: 'BACKTEST TITRES NON VALIDÉ — HISTORIQUE QUOTIDIEN INSUFFISANT',
+    validated: false,
+    exploratory: true,
     splits: {
       train: `${trainDates[0]} → ${trainDates[trainDates.length - 1]} (${trainDates.length} j)`,
       validation: `${valDates[0]} → ${valDates[valDates.length - 1]} (${valDates.length} j)`,
@@ -121,7 +122,8 @@ export function runBacktest(rows, profileId = 'equilibre') {
       frais: null,
       dividendes: null,
       benchmark: null,
-      note: 'Frais, dividendes et benchmark non disponibles dans le CSV — non inventés.',
+      note:
+        'Indicateurs exploratoires uniquement — historique quotidien officiel insuffisant. Frais/dividendes/benchmark non inventés.',
     },
     profileId,
   };

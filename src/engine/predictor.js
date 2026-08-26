@@ -8,7 +8,7 @@ function clamp(x, lo, hi) {
 }
 
 function scorePe(pe) {
-  if (pe === null || pe <= 0) return null;
+  if (pe === null || pe === undefined || !Number.isFinite(pe) || pe <= 0) return null;
   // Prefer moderate PE; very high PE is negative
   if (pe < 5) return 55;
   if (pe <= 12) return 85;
@@ -18,7 +18,7 @@ function scorePe(pe) {
 }
 
 function scoreDiv(d) {
-  if (d === null) return null;
+  if (d === null || d === undefined || !Number.isFinite(d)) return null;
   // Assume fraction or percent — normalize if > 1 treat as percent
   const y = d > 1 ? d / 100 : d;
   if (y <= 0) return 35;
@@ -29,7 +29,7 @@ function scoreDiv(d) {
 }
 
 function scoreRoe(roe) {
-  if (roe === null) return null;
+  if (roe === null || roe === undefined || !Number.isFinite(roe)) return null;
   const r = roe > 1 ? roe / 100 : roe;
   if (r < 0) return 25;
   if (r < 0.08) return 45;
@@ -39,7 +39,7 @@ function scoreRoe(roe) {
 }
 
 function scoreGrowth(g) {
-  if (g === null) return null;
+  if (g === null || g === undefined || !Number.isFinite(g)) return null;
   const r = g > 1 ? g / 100 : g;
   if (r < -0.05) return 25;
   if (r < 0) return 40;
@@ -49,7 +49,7 @@ function scoreGrowth(g) {
 }
 
 function scoreDebt(d) {
-  if (d === null) return null;
+  if (d === null || d === undefined || !Number.isFinite(d)) return null;
   if (d < 0) return 50;
   if (d <= 0.5) return 85;
   if (d <= 1) return 70;
@@ -58,7 +58,7 @@ function scoreDebt(d) {
 }
 
 function scoreMomentum(m) {
-  if (m === null) return null;
+  if (m === null || m === undefined || !Number.isFinite(m)) return null;
   if (m < -0.1) return 25;
   if (m < -0.03) return 40;
   if (m <= 0.03) return 55;
@@ -68,12 +68,12 @@ function scoreMomentum(m) {
 }
 
 function scoreLiquidity(l) {
-  if (l === null) return null;
+  if (l === null || l === undefined || !Number.isFinite(l)) return null;
   return clamp(l * 100, 0, 100);
 }
 
 function scoreRisk(vol) {
-  if (vol === null) return null;
+  if (vol === null || vol === undefined || !Number.isFinite(vol)) return null;
   if (vol < 0.01) return 80;
   if (vol < 0.02) return 70;
   if (vol < 0.04) return 55;
@@ -90,7 +90,7 @@ export function scoreSymbol(feature) {
   const negatives = [];
 
   const add = (label, value, weight) => {
-    if (value === null || value === undefined) return;
+    if (value === null || value === undefined || !Number.isFinite(value)) return;
     parts.push({ label, value, weight });
     if (value >= 65) positives.push(`${label}: ${Math.round(value)}`);
     if (value <= 40) negatives.push(`${label}: ${Math.round(value)}`);
@@ -104,7 +104,11 @@ export function scoreSymbol(feature) {
   add('ROE', scoreRoe(feature.roe), 1.0);
   add('Croissance', scoreGrowth(feature.revenueGrowth), 1.0);
   add('Dette', scoreDebt(feature.debtEquity), 0.9);
-  add('Qualité data', clamp(feature.dataQuality * 100, 0, 100), 0.8);
+  const dqScore =
+    feature.dataQuality != null && Number.isFinite(feature.dataQuality)
+      ? clamp(feature.dataQuality * 100, 0, 100)
+      : null;
+  add('Qualité data', dqScore, 0.8);
 
   if (feature.volume === 0) {
     negatives.push('Volume nul');
@@ -120,20 +124,34 @@ export function scoreSymbol(feature) {
     wSum += p.weight;
   }
   const composite = wSum > 0 ? score / wSum : 0;
+  const finiteComposite = Number.isFinite(composite) ? composite : 0;
 
   // Confidence = data quality × coverage of scored factors
   const coverage = parts.length / 9;
-  const confidence = clamp(feature.dataQuality * 0.6 + coverage * 0.4, 0, 1);
+  const dq = Number.isFinite(feature.dataQuality) ? feature.dataQuality : 0;
+  const confidence = clamp(dq * 0.6 + coverage * 0.4, 0, 1);
+  const insufficient = parts.length < 3 || feature.observations < 2;
+
+  if (insufficient) {
+    negatives.push('Données insuffisantes');
+  }
+
+  let qualityLabel = 'INSUFFICIENT';
+  if (dq >= 0.75 && feature.observations >= 20) qualityLabel = 'VERIFIED';
+  else if (dq >= 0.45 && feature.observations >= 5) qualityLabel = 'SECONDARY';
+  else if (dq > 0 && feature.observations >= 1) qualityLabel = 'MISSING';
 
   return {
     symbol: feature.symbol,
-    score: Math.round(composite * 10) / 10,
+    score: insufficient ? Math.min(finiteComposite, 45) : Math.round(finiteComposite * 10) / 10,
     positives,
     negatives,
-    dataQuality: feature.dataQuality,
+    dataQuality: dq,
     confidence,
     factors: parts,
     feature,
+    qualityLabel,
+    insufficient,
   };
 }
 

@@ -120,14 +120,27 @@ function finalize(result, liveAttempt) {
   };
 }
 
-/** Parse user file through CSV provider only; also merge into internal DB. */
-export async function loadFromCsvText(csvText) {
+/** Parse user file through CSV provider only — does NOT merge into INTERNAL until commit. */
+export async function previewCsvText(csvText) {
   const csv = createCsvProvider(csvText);
   const result = await csv.getQuotes();
-  if (result.ok && result.rows?.length) {
+  return {
+    ...result,
+    liveConnected: false,
+    liveStatusMessage: 'CSV en prévisualisation — pas encore fusionné · Pas LIVE BRVM.',
+    officialErrors: [],
+    pendingMerge: true,
+  };
+}
+
+/** Apply previewed CSV to engine view and optionally merge into INTERNAL DB. */
+export async function commitCsvImport(csvText, { mergeIntoInternal = true } = {}) {
+  const csv = createCsvProvider(csvText);
+  const result = await csv.getQuotes();
+  if (mergeIntoInternal && result.ok && result.rows?.length) {
     await upsertBars(result.rows, {
       lastCsvImportAt: new Date().toISOString(),
-      note: 'Fusion CSV utilisateur dans la base interne.',
+      note: 'Fusion CSV utilisateur dans la base interne (confirmée).',
     });
   }
   return {
@@ -135,7 +148,13 @@ export async function loadFromCsvText(csvText) {
     liveConnected: false,
     liveStatusMessage: 'CSV utilisateur — pas LIVE BRVM.',
     officialErrors: [],
+    pendingMerge: false,
   };
+}
+
+/** @deprecated use previewCsvText + commitCsvImport */
+export async function loadFromCsvText(csvText) {
+  return commitCsvImport(csvText, { mergeIntoInternal: true });
 }
 
 /** Force rebuild of internal historical DB: full history through J-1. */

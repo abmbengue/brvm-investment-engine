@@ -32,10 +32,12 @@ export function decide({ ranked, allocation, qualityGate, profile, stress, heldS
   const proposedBuy = new Set(
     (allocation?.proposedBuys || []).filter((b) => b.action === 'BUY').map((b) => b.symbol)
   );
+  const posBySym = new Map((allocation?.positions || []).map((p) => [p.symbol, p]));
 
   for (const item of ranked) {
     const inPort = selectedSymbols.has(item.symbol) || held.has(item.symbol);
     const owned = held.has(item.symbol);
+    const pos = posBySym.get(item.symbol);
     const dq = item.dataQuality;
     const conf = item.confidence;
     let action = 'WAIT';
@@ -112,6 +114,13 @@ export function decide({ ranked, allocation, qualityGate, profile, stress, heldS
       invalidation,
       dataQuality: dq,
       confidence: conf,
+      qualityLabel: item.qualityLabel || null,
+      currentWeightPct: pos?.weightPct ?? null,
+      targetWeightPct: pos?.targetWeightPct ?? null,
+      weightGapPct:
+        pos != null
+          ? Math.round(((pos.weightPct || 0) - (pos.targetWeightPct || 0)) * 10) / 10
+          : null,
     });
   }
 

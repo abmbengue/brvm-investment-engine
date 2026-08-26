@@ -66,6 +66,10 @@ export function allocate(selected, capital, profileId, markedHoldings = null) {
       concentration: 0,
       positionCount: heldMap.size,
       proposedBuys: [],
+      targetWeightSum: 0,
+      maxWeight: profile.maxWeight,
+      maxWeightRespected: true,
+      checks: { targetWeightSumOk: true, maxWeightOk: true },
     };
   }
 
@@ -82,8 +86,10 @@ export function allocate(selected, capital, profileId, markedHoldings = null) {
     capped = capped.map((w) => Math.min(w, profile.maxWeight));
     leftover = 1 - capped.reduce((a, b) => a + b, 0);
   }
-  const cSum = capped.reduce((a, b) => a + b, 0) || 1;
-  const weights = capped.map((w) => w / cSum);
+  const cSum = capped.reduce((a, b) => a + b, 0) || 0;
+  // Do NOT renormalize upward — that can breach maxWeight. Leftover stays unallocated (cash).
+  const weights = cSum > 1 + 1e-9 ? capped.map((w) => w / cSum) : capped;
+  const targetWeightSum = weights.reduce((a, b) => a + b, 0);
 
   // Target value in total wealth terms; buy deficit with spot cash
   let remainingCash = investableSpot;
@@ -119,6 +125,7 @@ export function allocate(selected, capital, profileId, markedHoldings = null) {
       score: item.score,
       weight: finalWeight,
       weightPct: Math.round(finalWeight * 1000) / 10,
+      targetWeight: weight,
       targetWeightPct: Math.round(weight * 1000) / 10,
       amount: finalAmount,
       targetAmount: targetValue,
@@ -129,6 +136,7 @@ export function allocate(selected, capital, profileId, markedHoldings = null) {
       price,
       confidence: item.confidence,
       dataQuality: item.dataQuality,
+      qualityLabel: item.qualityLabel || null,
       positives: item.positives,
       negatives: item.negatives,
       alreadyHeld: Boolean(held),
@@ -162,6 +170,7 @@ export function allocate(selected, capital, profileId, markedHoldings = null) {
 
   const investedSpot = proposedBuys.reduce((a, p) => a + p.amount, 0);
   const topWeight = positions.reduce((m, p) => Math.max(m, p.weight || 0), 0);
+  const maxTargetBreach = weights.some((w) => w > profile.maxWeight + 1e-9);
 
   return {
     positions,
@@ -175,5 +184,12 @@ export function allocate(selected, capital, profileId, markedHoldings = null) {
     concentration: topWeight,
     positionCount: positions.filter((p) => p.shares > 0).length,
     profile,
+    targetWeightSum: Math.round(targetWeightSum * 10000) / 10000,
+    maxWeight: profile.maxWeight,
+    maxWeightRespected: !maxTargetBreach,
+    checks: {
+      targetWeightSumOk: targetWeightSum <= 1 + 1e-6,
+      maxWeightOk: !maxTargetBreach,
+    },
   };
 }

@@ -46,10 +46,12 @@ function parseDate(v) {
   return d.toISOString().slice(0, 10);
 }
 
+import { asOfJ1Date } from '../data/historicalSync.js';
+
 /**
  * Parse CSV text into normalized rows + diagnostics.
  */
-export function parseCsv(text) {
+export function parseCsv(text, { now = new Date() } = {}) {
   const result = {
     ok: false,
     rows: [],
@@ -61,6 +63,7 @@ export function parseCsv(text) {
     errors: [],
     warnings: [],
     delimiter: ',',
+    summary: null,
   };
 
   if (!text || !String(text).trim()) {
@@ -117,6 +120,7 @@ export function parseCsv(text) {
   }
   if (result.errors.length) return result;
 
+  const asOfLimit = asOfJ1Date(now);
   const seen = new Set();
   const rows = [];
 
@@ -133,26 +137,49 @@ export function parseCsv(text) {
       .toUpperCase();
     const close = parseNumber(get('close'));
     const volume = parseNumber(get('volume'));
+    const lineNo = i + 1;
 
-    if (!date || !symbol) {
+    if (!date) {
       result.rejectedRows += 1;
-      result.warnings.push(`Ligne ${i + 1}: date/symbol invalide`);
+      result.warnings.push(`Ligne ${lineNo} — colonne date : date invalide ou manquante`);
       continue;
     }
-    if (close === null || close <= 0) {
+    if (!symbol) {
       result.rejectedRows += 1;
-      result.warnings.push(`Ligne ${i + 1}: prix nul ou invalide (${symbol})`);
+      result.warnings.push(`Ligne ${lineNo} — colonne symbol : symbole manquant`);
       continue;
     }
-    if (volume === null || volume < 0) {
+    if (date > asOfLimit) {
       result.rejectedRows += 1;
-      result.warnings.push(`Ligne ${i + 1}: volume invalide (${symbol})`);
+      result.warnings.push(
+        `Ligne ${lineNo} — date ${date} : postérieure à J-1 (${asOfLimit}) non autorisée`
+      );
       continue;
     }
-    // volume = 0 is allowed for data quality scoring but flagged
+    if (close === null) {
+      result.rejectedRows += 1;
+      result.warnings.push(`Ligne ${lineNo} — colonne close : valeur numérique manquante (${symbol})`);
+      continue;
+    }
+    if (close <= 0) {
+      result.rejectedRows += 1;
+      result.warnings.push(`Ligne ${lineNo} — colonne close : prix invalide ou négatif (${symbol})`);
+      continue;
+    }
+    if (volume === null) {
+      result.rejectedRows += 1;
+      result.warnings.push(`Ligne ${lineNo} — colonne volume : valeur numérique manquante (${symbol})`);
+      continue;
+    }
+    if (volume < 0) {
+      result.rejectedRows += 1;
+      result.warnings.push(`Ligne ${lineNo} — colonne volume : valeur négative impossible (${symbol})`);
+      continue;
+    }
     const key = `${date}|${symbol}`;
     if (seen.has(key)) {
       result.duplicatesRemoved += 1;
+      result.warnings.push(`Ligne ${lineNo} — doublon ignoré (${symbol} @ ${date})`);
       continue;
     }
     seen.add(key);
@@ -177,6 +204,17 @@ export function parseCsv(text) {
   result.importedRows = rows.length;
   result.symbols = [...new Set(rows.map((r) => r.symbol))].sort();
   result.ok = rows.length > 0;
+  result.summary = {
+    lineCount: result.lineCount,
+    validRows: rows.length,
+    rejectedRows: result.rejectedRows,
+    duplicatesRemoved: result.duplicatesRemoved,
+    symbolCount: result.symbols.length,
+    dateMin: rows[0]?.date || null,
+    dateMax: rows[rows.length - 1]?.date || null,
+    asOfLimit,
+    live: false,
+  };
   if (!result.ok) result.errors.push('Aucune ligne exploitable après validation');
   return result;
 }

@@ -36,9 +36,16 @@ export function formatMoney(value) {
   return raw.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
 }
 
-/** Display helper with currency suffix. */
+/** Display helper with currency suffix. Supports negatives for P&L. */
 export function formatMoneyLabel(value, suffix = 'FCFA') {
-  const formatted = formatMoney(value);
+  if (value === '' || value === null || value === undefined) return `0 ${suffix}`;
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n)) return `0 ${suffix}`;
+  if (n < 0) {
+    const formatted = formatMoney(Math.abs(n));
+    return formatted ? `-${formatted} ${suffix}` : `0 ${suffix}`;
+  }
+  const formatted = formatMoney(n);
   if (!formatted) return `0 ${suffix}`;
   return `${formatted} ${suffix}`;
 }
