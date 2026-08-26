@@ -1,7 +1,7 @@
 {
   "name": "brvm-investment-engine",
   "private": true,
-  "version": "7.6.3",
+  "version": "7.7.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -14,7 +14,8 @@
   },
   "dependencies": {
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "recharts": "^3.10.1"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^7.0.1",

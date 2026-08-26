@@ -18,8 +18,8 @@ export default function UserGuide({ open, onClose }) {
             <p>
               L’app est découpée en onglets : <b>Paramètres</b> (capital, apports, holdings, exports),{' '}
               <b>Données</b>, <b>Analyse</b> (predictor, allocation, stress, décisions),{' '}
-              <b>Simulation</b>, <b>Backtest</b>, <b>Audit</b>. Le bandeau et les métriques restent
-              visibles en haut.
+              <b>Simulation</b>, <b>Graphiques</b> (courbes, histogrammes, camemberts),{' '}
+              <b>Backtest</b>, <b>Audit</b>. Le bandeau et les métriques restent visibles en haut.
             </p>
           </section>
           <section>

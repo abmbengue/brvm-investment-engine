@@ -1,7 +1,16 @@
 # VERSION.md
 
-- **Version** : 7.6.3
+- **Version** : 7.7.0
 - **Date** : 2026-08-26
+
+## 7.7.0
+
+- Nouvel onglet **Graphiques**
+- Courbes : capital versé vs valeur projetée, gain, holdings
+- Histogrammes : contributions annuelles (initial / spot / récurrent / div. estimés), poids par titre
+- Camemberts : structure du capital, allocation, spot vs réserve, décisions
+- Axe X = années calendaires du plan (intervalle adapté à l’horizon)
+- Dividendes illustrés seulement si yield observé (hypothèse, jamais inventé)
 
 ## 7.6.3
 

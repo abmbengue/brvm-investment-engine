@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback, useEffect } from 'react';
+import { useMemo, useState, useCallback, useEffect, lazy, Suspense } from 'react';
 import MoneyInput from './components/MoneyInput.jsx';
 import YearSelect from './components/YearSelect.jsx';
 import UserGuide from './components/UserGuide.jsx';
@@ -17,7 +17,9 @@ import { loadBundledAnnualHistory } from './data/historical/HistoricalMarketData
 import { getCompanyName } from './data/companyNames.js';
 import './App.css';
 
-const VERSION = '7.6.3';
+const ChartsPanel = lazy(() => import('./components/ChartsPanel.jsx'));
+
+const VERSION = '7.7.0';
 const SAMPLE_CSV_URL = `${import.meta.env.BASE_URL}sample-brvm.csv`;
 const ANNUAL_HISTORY_URL = `${import.meta.env.BASE_URL}data/BRVM_HISTORICAL_2006_2025_ANNUAL.csv`;
 const YEAR_SELECT_MIN = 2000;
@@ -36,6 +38,7 @@ const TABS = [
   { id: 'data', label: 'Données' },
   { id: 'analyse', label: 'Analyse' },
   { id: 'simulation', label: 'Simulation' },
+  { id: 'graphs', label: 'Graphiques' },
   { id: 'backtest', label: 'Backtest' },
   { id: 'audit', label: 'Audit' },
 ];
@@ -1233,6 +1236,19 @@ export default function App() {
         </div>
       </section>
 
+      </div>
+      )}
+
+      {activeTab === 'graphs' && (
+      <div
+        className="tab-panel"
+        role="tabpanel"
+        id="panel-graphs"
+        aria-labelledby="tab-graphs"
+      >
+        <Suspense fallback={<p className="panel muted">Chargement des graphiques…</p>}>
+          <ChartsPanel result={result} />
+        </Suspense>
       </div>
       )}
 
