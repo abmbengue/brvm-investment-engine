@@ -1,16 +1,16 @@
 # DATA-SCHEMA.md
 
-## Statut actuel (V7.4.0)
+## Statut actuel (V7.4.1)
 
 | Mode | Live | Disponible |
 |------|------|------------|
-| INTERNAL | NON | OUI — base historique locale (IndexedDB) |
+| INTERNAL | NON | OUI — **tout l’historique public jusqu’à J-1** |
 | SAMPLE | NON | OUI (fallback) |
 | CSV | NON | OUI (import + fusion interne) |
 | ANNUAL_INDEX | NON | OUI — BRVM Composite année de fin 2006–2025 |
-| LIVE BRVM | — | **NON** — contrat officiel requis |
+| LIVE BRVM | — | **NON utilisé** — volontairement |
 
-Message : base interne / indice annuel **≠** flux BRVM live.
+Politique : pas de LIVE BRVM. La base de travail utilise toutes les séries disponibles avec `date <= J-1`.
 
 ## Historique annuel (PRICE_INDEX)
 
@@ -47,7 +47,8 @@ Construit à partir de séries historiques publiques :
 `https://github.com/Fredysessie/brvm-data-public`
 
 Univers cœur : SNTS, BOAB, ORAC, SGBC, ETIT, CABC, ECOC, TTLC, SHEC, SIVC, SDCC, CIEC  
-Fenêtre : ~3 ans de daily bars. **≠** feed officiel BRVM.
+Fenêtre : **historique public complet** coupé à **J-1** (jamais la séance du jour / LIVE).  
+**≠** feed officiel BRVM.
 
 ## Architecture
 

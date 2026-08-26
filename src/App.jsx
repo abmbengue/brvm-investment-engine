@@ -7,7 +7,7 @@ import { loadMarketData, loadFromCsvText, refreshInternalHistoricalDb } from './
 import { loadBundledAnnualHistory } from './data/historical/HistoricalMarketData.js';
 import './App.css';
 
-const VERSION = '7.4.0';
+const VERSION = '7.4.1';
 const SAMPLE_CSV_URL = `${import.meta.env.BASE_URL}sample-brvm.csv`;
 const ANNUAL_HISTORY_URL = `${import.meta.env.BASE_URL}data/BRVM_HISTORICAL_2006_2025_ANNUAL.csv`;
 const EMPTY_HOLDING = () => ({
@@ -49,9 +49,11 @@ export default function App() {
   const [rate, setRate] = useState(9);
   const [profileId, setProfileId] = useState('equilibre');
   const [csvResult, setCsvResult] = useState(null);
-  const [csvMessage, setCsvMessage] = useState('Chargement SAMPLE…');
+  const [csvMessage, setCsvMessage] = useState('Chargement historique jusqu’à J-1…');
   const [dataSource, setDataSource] = useState('NONE');
-  const [liveStatusMessage, setLiveStatusMessage] = useState('Données temps réel non connectées.');
+  const [liveStatusMessage, setLiveStatusMessage] = useState(
+    'Pas de LIVE BRVM — données historiques disponibles jusqu’à J-1.'
+  );
   const [commitSignal, setCommitSignal] = useState(0);
   const [holdingRows, setHoldingRows] = useState([EMPTY_HOLDING()]);
   const [annualHistory, setAnnualHistory] = useState(null);
@@ -103,13 +105,13 @@ export default function App() {
     let cancelled = false;
     (async () => {
       try {
-        setCsvMessage('Initialisation de la base interne historique…');
+        setCsvMessage('Initialisation historique complet jusqu’à J-1…');
         const loaded = await loadMarketData({ sampleUrl: SAMPLE_CSV_URL });
         if (!cancelled) applyProviderResult(loaded);
       } catch (e) {
         if (!cancelled) {
           setDataSource('NONE');
-          setLiveStatusMessage('Données temps réel non connectées.');
+          setLiveStatusMessage('Pas de LIVE BRVM — fallback SAMPLE/CSV.');
           setCsvMessage(`Base interne indisponible — fallback SAMPLE/CSV. (${e.message})`);
           try {
             const fb = await loadMarketData({ sampleUrl: SAMPLE_CSV_URL, preferSample: true });
@@ -424,8 +426,12 @@ export default function App() {
             {badge.label}
           </b>
           {' — '}
-          <span id="live-flag">Flux live : <b>{result.dataStatus.live ? 'OUI' : 'NON'}</b></span>.
-          Authentification / API privée / paywall non contournés.
+          <span id="live-flag">Flux live : <b>{result.dataStatus.live ? 'OUI' : 'NON'}</b></span>
+          {' — '}
+          <span id="asof-flag">
+            asOf : <b>{result.dataStatus.asOf || '—'}</b> (politique J-1, pas LIVE BRVM)
+          </span>
+          . Authentification / API privée / paywall non contournés.
         </p>
         <div className="toolbar">
           <input

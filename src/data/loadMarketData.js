@@ -10,8 +10,8 @@ const STALE_MS = 7 * 24 * 60 * 60 * 1000; // refresh weekly
 
 /**
  * Load market data for the engine.
- * Prefer INTERNAL historical DB (built from public historical series).
- * Never upgrades anything to LIVE without an authorized feed.
+ * Prefer INTERNAL historical DB: ALL available public history through J-1.
+ * Never uses official BRVM LIVE.
  */
 export async function loadMarketData({
   sampleUrl,
@@ -40,13 +40,14 @@ export async function loadMarketData({
   const summary = await getDbSummary();
   const updatedAt = summary.updatedAt ? Date.parse(summary.updatedAt) : 0;
   const stale = !summary.rowCount || !updatedAt || Date.now() - updatedAt > STALE_MS;
+  // Force resync when previous DB was a truncated 3y window
+  const needsFullHistory = summary.fullHistory !== true || summary.asOfPolicy !== 'J-1';
 
-  if (forceHistoricalSync || stale) {
+  if (forceHistoricalSync || stale || needsFullHistory) {
     try {
-      // Keep ~3y window for workable predictor/backtest without huge downloads
-      await syncHistoricalInternalDb({ maxAgeDays: 365 * 3 });
+      // Full available history, clipped to J-1 (no LIVE BRVM)
+      await syncHistoricalInternalDb({ maxAgeDays: null });
     } catch (e) {
-      // continue to fallbacks
       liveAttempt.errors = [...(liveAttempt.errors || []), `Sync historique: ${e.message}`];
     }
   }
@@ -96,18 +97,24 @@ export async function loadMarketData({
 }
 
 function finalize(result, liveAttempt) {
-  const liveConnected = Boolean(liveAttempt?.ok && liveAttempt?.meta?.live);
+  // Official BRVM LIVE is intentionally unused — never promote to LIVE here.
+  void liveAttempt;
   const mode = result.meta?.mode;
-  let liveStatusMessage = 'Données temps réel non connectées.';
-  if (liveConnected) liveStatusMessage = `LIVE — ${liveAttempt.meta.sourceLabel}`;
-  else if (mode === DATA_MODES.INTERNAL) {
-    liveStatusMessage =
-      'Base interne historique active (pas un flux BRVM live officiel).';
+  const asOf = result.meta?.asOf || result.meta?.asOfLimit || null;
+  let liveStatusMessage = 'Pas de LIVE BRVM — données historiques disponibles jusqu’à J-1.';
+  if (mode === DATA_MODES.INTERNAL) {
+    liveStatusMessage = asOf
+      ? `Base interne jusqu’à J-1 (asOf ${asOf}) — pas un flux BRVM live.`
+      : 'Base interne historique jusqu’à J-1 — pas un flux BRVM live.';
+  } else if (mode === DATA_MODES.SAMPLE) {
+    liveStatusMessage = 'SAMPLE — démonstration, pas LIVE BRVM.';
+  } else if (mode === DATA_MODES.CSV) {
+    liveStatusMessage = 'CSV utilisateur — pas LIVE BRVM.';
   }
 
   return {
     ...result,
-    liveConnected,
+    liveConnected: false,
     liveStatusMessage,
     officialErrors: liveAttempt?.errors || [],
   };
@@ -126,15 +133,15 @@ export async function loadFromCsvText(csvText) {
   return {
     ...result,
     liveConnected: false,
-    liveStatusMessage: 'Données temps réel non connectées.',
+    liveStatusMessage: 'CSV utilisateur — pas LIVE BRVM.',
     officialErrors: [],
   };
 }
 
-/** Force rebuild of internal historical DB from public series. */
+/** Force rebuild of internal historical DB: full history through J-1. */
 export async function refreshInternalHistoricalDb() {
   const official = createBrvmOfficialStubProvider();
   const liveAttempt = await official.getQuotes();
-  const synced = await syncHistoricalInternalDb({ maxAgeDays: 365 * 3 });
+  const synced = await syncHistoricalInternalDb({ maxAgeDays: null });
   return finalize(synced, liveAttempt);
 }

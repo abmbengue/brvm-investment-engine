@@ -93,7 +93,7 @@ describe('SAMPLE provider + fallback', () => {
     expect(loaded.meta.mode).toBe('SAMPLE');
     expect(loaded.meta.live).toBe(false);
     expect(loaded.liveConnected).toBe(false);
-    expect(loaded.liveStatusMessage).toMatch(/non connectées/i);
+    expect(loaded.liveStatusMessage).not.toMatch(/^LIVE/i);
   });
 
   it('falls back when SAMPLE fetch fails', async () => {

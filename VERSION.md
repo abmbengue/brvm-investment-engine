@@ -1,7 +1,14 @@
 # VERSION.md
 
-- **Version** : 7.4.0
+- **Version** : 7.4.1
 - **Date** : 2026-08-26
+
+## 7.4.1
+
+- Politique data : **pas de LIVE BRVM**
+- Base interne = **tout l’historique public disponible jusqu’à J-1**
+- Plus de fenêtre forcée 3 ans
+- Labels UI : asOf J-1 explicite
 
 ## 7.4.0
 
@@ -18,9 +25,6 @@
 - Base de données interne (IndexedDB) pour le Predictor
 - Ingestion de séries historiques publiques (GitHub `brvm-data-public`)
 - Mode **INTERNAL** (pas LIVE)
-- Bouton **ACTUALISER BASE HISTORIQUE**
-- Fusion des CSV utilisateur dans la base interne
-- Fallback SAMPLE si sync impossible
 
 ## 7.2.0
 
