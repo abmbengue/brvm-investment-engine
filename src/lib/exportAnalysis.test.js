@@ -54,6 +54,7 @@ describe('exportAnalysis', () => {
     expect(rows[0].live).toBe('NON');
     expect(rows[0].live_policy).toMatch(/Pas LIVE/);
     expect(rows[0].action).toBe('BUY');
+    expect(rows[0].companyName).toBeTruthy();
   });
 
   it('exports allocation and portfolio', () => {

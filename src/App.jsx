@@ -13,9 +13,10 @@ import {
   refreshInternalHistoricalDb,
 } from './data/loadMarketData.js';
 import { loadBundledAnnualHistory } from './data/historical/HistoricalMarketData.js';
+import { getCompanyName } from './data/companyNames.js';
 import './App.css';
 
-const VERSION = '7.5.0';
+const VERSION = '7.5.1';
 const SAMPLE_CSV_URL = `${import.meta.env.BASE_URL}sample-brvm.csv`;
 const ANNUAL_HISTORY_URL = `${import.meta.env.BASE_URL}data/BRVM_HISTORICAL_2006_2025_ANNUAL.csv`;
 const EMPTY_HOLDING = () => ({
@@ -525,7 +526,10 @@ export default function App() {
               <tbody>
                 {result.holdings.positions.map((p) => (
                   <tr key={p.symbol}>
-                    <td>{p.symbol}</td>
+                    <td>
+                      {p.symbol}
+                      <div className="small muted">{getCompanyName(p.symbol)}</div>
+                    </td>
                     <td>{p.shares}</td>
                     <td>{p.priced ? formatMoneyLabel(p.price) : 'prix N/D'}</td>
                     <td>{p.marketValue != null ? formatMoneyLabel(p.marketValue) : '—'}</td>
@@ -716,7 +720,8 @@ export default function App() {
               <table>
                 <thead>
                   <tr>
-                    <th>Titre</th>
+                    <th>Symbole</th>
+                    <th>Société</th>
                     <th>Score</th>
                     <th>+</th>
                     <th>−</th>
@@ -729,6 +734,7 @@ export default function App() {
                   {result.ranked.slice(0, 10).map((r) => (
                     <tr key={r.symbol}>
                       <td>{r.symbol}</td>
+                      <td className="small">{getCompanyName(r.symbol)}</td>
                       <td>{r.score}</td>
                       <td className="small">{r.positives.slice(0, 2).join(', ') || '—'}</td>
                       <td className="small">{r.negatives.slice(0, 2).join(', ') || '—'}</td>
@@ -748,12 +754,32 @@ export default function App() {
         <div className="panel">
           <h2>Allocation du cash spot — {result.profile.label}</h2>
           <p>
-            Cash spot : <b>{formatMoneyLabel(result.allocation.spotCash)}</b> · Réserve :{' '}
-            <b>{formatMoneyLabel(result.allocation.reserve)}</b> · Spot investi :{' '}
-            <b>{formatMoneyLabel(result.allocation.invested)}</b> · Détenu :{' '}
-            <b>{formatMoneyLabel(result.allocation.existingMarketValue)}</b> · Concentration :{' '}
-            <b>{pct(result.allocation.concentration)}</b>
+            Cash spot : <b>{formatMoneyLabel(result.allocation.spotCash)}</b> · Réserve profil :{' '}
+            <b>{formatMoneyLabel(result.allocation.reserveSpot ?? 0)}</b> · Investissable :{' '}
+            <b>{formatMoneyLabel(result.allocation.investableSpot ?? 0)}</b> · Spot investi :{' '}
+            <b>{formatMoneyLabel(result.allocation.invested)}</b> · Cash résiduel :{' '}
+            <b>{formatMoneyLabel(result.allocation.residualCash ?? 0)}</b>
           </p>
+          <p className="small muted">
+            Concentration = {result.allocation.concentrationDefinition || 'poids du plus gros titre (portefeuille actions)'}
+            {' · '}
+            <b>{pct(result.allocation.concentration)}</b>
+            {result.allocation.effectiveN != null ? (
+              <>
+                {' · '}N effectif ≈ <b>{result.allocation.effectiveN}</b>
+              </>
+            ) : null}
+            {' · '}maxWeight <b>{pct(result.allocation.maxWeight)}</b>
+          </p>
+          {result.allocation.diversificationLimited && (
+            <div className="warn">
+              <b>DIVERSIFICATION LIMITÉE</b>
+              <p className="small">{result.allocation.diversificationNote}</p>
+            </div>
+          )}
+          {!result.allocation.diversificationLimited && result.allocation.diversificationNote && (
+            <p className="small yellow">{result.allocation.diversificationNote}</p>
+          )}
           {(result.allocation.targetWeightSum != null ||
             result.allocation.maxWeightRespected != null) && (
             <p className="small muted">
@@ -772,6 +798,8 @@ export default function App() {
                     ? 'respecté'
                     : 'dépassé'}
               </b>
+              {' · '}
+              Éligibles : <b>{result.selection?.eligibleCount ?? result.allocation.eligibleCount ?? '—'}</b>
             </p>
           )}
           {result.allocation.positions.length === 0 ? (
@@ -781,33 +809,65 @@ export default function App() {
               <table>
                 <thead>
                   <tr>
-                    <th>Titre</th>
+                    <th>Symbole</th>
+                    <th>Société</th>
                     <th>Score</th>
+                    <th>Qualité</th>
                     <th>Détenu</th>
-                    <th>Achat spot</th>
-                    <th>Total</th>
-                    <th>Poids</th>
-                    <th>Montant</th>
+                    <th>Poids actuel</th>
+                    <th>Poids cible</th>
+                    <th>Écart</th>
+                    <th>Achat</th>
+                    <th>Décision</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {result.allocation.positions.map((p) => (
-                    <tr key={p.symbol}>
-                      <td>
-                        {p.symbol}
-                        {p.alreadyHeld ? ' · détenu' : ''}
-                      </td>
-                      <td>{p.score ?? '—'}</td>
-                      <td>{p.existingShares || 0}</td>
-                      <td>{p.buyShares || 0}</td>
-                      <td>{p.shares}</td>
-                      <td>{p.weightPct}%</td>
-                      <td>{formatMoneyLabel(p.amount)}</td>
-                    </tr>
-                  ))}
+                  {result.allocation.positions.map((p) => {
+                    const gap = Math.round(((p.weightPct || 0) - (p.targetWeightPct || 0)) * 10) / 10;
+                    const decision =
+                      p.buyShares > 0 ? (p.alreadyHeld ? 'ADD' : 'BUY') : p.alreadyHeld ? 'HOLD' : '—';
+                    return (
+                      <tr key={p.symbol}>
+                        <td>{p.symbol}</td>
+                        <td className="small">{p.companyName || getCompanyName(p.symbol)}</td>
+                        <td>{p.score ?? '—'}</td>
+                        <td className={qualityClass(p.qualityLabel)}>{p.qualityLabel || '—'}</td>
+                        <td>{p.alreadyHeld ? 'Oui' : 'Non'}</td>
+                        <td>{p.weightPct}%</td>
+                        <td>{p.targetWeightPct}%</td>
+                        <td>
+                          {gap > 0 ? '+' : ''}
+                          {gap}%
+                        </td>
+                        <td>{formatMoneyLabel(p.buyAmount || 0)}</td>
+                        <td>
+                          <b
+                            className={
+                              decision === 'BUY' || decision === 'ADD'
+                                ? 'green'
+                                : decision === 'HOLD'
+                                  ? 'yellow'
+                                  : ''
+                            }
+                          >
+                            {decision}
+                          </b>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
+          )}
+          {result.allocation.positions.some((p) => p.explanation) && (
+            <p className="small muted">
+              {result.allocation.positions
+                .filter((p) => p.buyAmount > 0)
+                .slice(0, 2)
+                .map((p) => p.explanation)
+                .join(' · ')}
+            </p>
           )}
         </div>
       </section>
@@ -865,23 +925,24 @@ export default function App() {
               <table>
                 <thead>
                   <tr>
-                    <th>Titre</th>
+                    <th>Symbole</th>
+                    <th>Société</th>
                     <th>Action</th>
                     <th>Score</th>
+                    <th>Qualité</th>
                     <th>Conf.</th>
                     <th>Poids actuel</th>
                     <th>Poids cible</th>
                     <th>Écart</th>
-                    <th>Risque</th>
+                    <th>Achat</th>
                     <th>Justification</th>
-                    <th>Invalidation</th>
-                    <th>Data</th>
                   </tr>
                 </thead>
                 <tbody>
                   {result.decisions.map((d, i) => (
                     <tr key={`${d.symbol}-${i}`}>
                       <td>{d.symbol}</td>
+                      <td className="small">{d.companyName || getCompanyName(d.symbol)}</td>
                       <td>
                         <b
                           className={
@@ -896,6 +957,7 @@ export default function App() {
                         </b>
                       </td>
                       <td>{d.score ?? '—'}</td>
+                      <td className={qualityClass(d.qualityLabel)}>{d.qualityLabel || '—'}</td>
                       <td>
                         {d.confidence != null ? `${Math.round(d.confidence * 100)}%` : '—'}
                       </td>
@@ -910,10 +972,8 @@ export default function App() {
                           ? `${d.weightGapPct > 0 ? '+' : ''}${d.weightGapPct}%`
                           : '—'}
                       </td>
-                      <td>{d.risk}</td>
+                      <td>{formatMoneyLabel(d.buyAmount || 0)}</td>
                       <td className="small">{d.justification}</td>
-                      <td className="small">{d.invalidation}</td>
-                      <td>{d.dataQuality != null ? `${Math.round(d.dataQuality * 100)}%` : '—'}</td>
                     </tr>
                   ))}
                 </tbody>

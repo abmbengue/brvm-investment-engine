@@ -3,6 +3,8 @@
  * Insufficient data → WAIT / NO ACTION. Never firm recommendation when BLOCKED.
  */
 
+import { getCompanyName } from '../data/companyNames.js';
+
 export function decide({ ranked, allocation, qualityGate, profile, stress, heldSymbols = [] }) {
   const decisions = [];
 
@@ -10,6 +12,7 @@ export function decide({ ranked, allocation, qualityGate, profile, stress, heldS
     return [
       {
         symbol: '—',
+        companyName: '—',
         action: 'NO ACTION',
         justification: 'Quality Gate BLOCKED — données insuffisantes ou invalides',
         score: null,
@@ -26,18 +29,14 @@ export function decide({ ranked, allocation, qualityGate, profile, stress, heldS
     ...heldSymbols.map((s) => String(s).toUpperCase()),
     ...((allocation?.existing || []).map((p) => p.symbol) || []),
   ]);
-  const proposedAdd = new Set(
-    (allocation?.proposedBuys || []).filter((b) => b.action === 'ADD').map((b) => b.symbol)
-  );
-  const proposedBuy = new Set(
-    (allocation?.proposedBuys || []).filter((b) => b.action === 'BUY').map((b) => b.symbol)
-  );
+  const buyBySym = new Map((allocation?.proposedBuys || []).map((b) => [b.symbol, b]));
   const posBySym = new Map((allocation?.positions || []).map((p) => [p.symbol, p]));
 
   for (const item of ranked) {
     const inPort = selectedSymbols.has(item.symbol) || held.has(item.symbol);
     const owned = held.has(item.symbol);
     const pos = posBySym.get(item.symbol);
+    const proposed = buyBySym.get(item.symbol);
     const dq = item.dataQuality;
     const conf = item.confidence;
     let action = 'WAIT';
@@ -45,7 +44,7 @@ export function decide({ ranked, allocation, qualityGate, profile, stress, heldS
     let risk = 'modéré';
     let invalidation = '';
 
-    if (dq < 0.3 || conf < 0.35) {
+    if (dq < 0.3 || conf < 0.35 || item.insufficient) {
       action = 'WAIT';
       justification = 'Données insuffisantes pour une décision ferme';
       risk = 'données';
@@ -60,6 +59,17 @@ export function decide({ ranked, allocation, qualityGate, profile, stress, heldS
       justification = 'Position déjà détenue avec score faible';
       risk = 'titre';
       invalidation = 'Score remonte au-dessus de 50 avec data quality stable';
+    } else if (
+      owned &&
+      pos &&
+      pos.targetWeightPct != null &&
+      pos.weightPct != null &&
+      pos.weightPct > pos.targetWeightPct + 2
+    ) {
+      action = 'REDUCE';
+      justification = `Poids actuel ${pos.weightPct}% > cible ${pos.targetWeightPct}% — surpondération`;
+      risk = 'concentration';
+      invalidation = 'Poids actuel ≤ cible + 1 pt';
     } else if (item.score < 48 && owned) {
       action = 'REDUCE';
       justification = 'Position détenue — score médiocre, réduire l’exposition';
@@ -70,23 +80,36 @@ export function decide({ ranked, allocation, qualityGate, profile, stress, heldS
       justification = 'Stress baissier sur titre déjà détenu';
       risk = 'marché';
       invalidation = 'Scénario baissier moins sévère / haircut réduit';
-    } else if (proposedAdd.has(item.symbol) || (owned && item.score >= 62 && conf >= 0.45)) {
+    } else if (proposed && proposed.amount > 0 && proposed.action === 'ADD') {
       action = 'ADD';
-      justification = owned
-        ? 'Titre déjà en portefeuille — renforcement proposé avec le cash spot'
-        : 'Renforcement proposé';
+      justification = `Renforcement proposé — ${Math.round(proposed.amount).toLocaleString('fr-FR')} FCFA (score ${item.score})`;
       risk = 'concentration';
       invalidation = `Dépasser limite concentration ${(profile.concentrationLimit * 100).toFixed(0)}%`;
-    } else if (proposedBuy.has(item.symbol) || (item.score >= 70 && conf >= 0.55 && !owned)) {
+    } else if (proposed && proposed.amount > 0 && proposed.action === 'BUY') {
       action = 'BUY';
-      justification = `Nouvelle ligne proposée — score ${item.score}, confiance ${Math.round(conf * 100)}%`;
-      risk = item.feature.volatility > 0.05 ? 'titre élevé' : 'marché';
-      invalidation = `Score < 55 ou qualité data < 40%`;
+      justification = `Nouvelle ligne — ${Math.round(proposed.amount).toLocaleString('fr-FR')} FCFA · score ${item.score}, confiance ${Math.round(conf * 100)}%`;
+      risk = item.feature?.volatility > 0.05 ? 'titre élevé' : 'marché';
+      invalidation = 'Score < 55 ou qualité data < 40%';
+    } else if (proposed && (!proposed.amount || proposed.amount <= 0)) {
+      action = 'WAIT';
+      justification = 'Signal d’achat sans montant exécutable (arrondi / cash / plafond)';
+      risk = 'liquidité';
+      invalidation = 'Cash investissable ou prix permettant ≥ 1 action';
+    } else if (
+      owned &&
+      pos &&
+      pos.targetWeightPct != null &&
+      Math.abs((pos.weightPct || 0) - (pos.targetWeightPct || 0)) <= 2
+    ) {
+      action = 'HOLD';
+      justification = 'Position proche de la cible — aucun ajustement material';
+      risk = 'modèle';
+      invalidation = 'Écart poids > 2 pts ou changement de score';
     } else if (item.score >= 55 && !inPort && conf >= 0.45) {
       action = 'WAIT';
-      justification = 'Score correct mais hors sélection automatique (contraintes profil)';
+      justification = 'Score correct mais hors sélection / cash insuffisant après contraintes';
       risk = 'modèle';
-      invalidation = 'Entrée dans le top sélection du profil';
+      invalidation = 'Entrée dans le top sélection du profil avec cash disponible';
     } else if (owned) {
       action = 'NO ACTION';
       justification = 'Position détenue — pas de signal d’ajustement';
@@ -107,6 +130,7 @@ export function decide({ ranked, allocation, qualityGate, profile, stress, heldS
 
     decisions.push({
       symbol: item.symbol,
+      companyName: getCompanyName(item.symbol),
       action,
       justification,
       score: item.score,
@@ -121,10 +145,11 @@ export function decide({ ranked, allocation, qualityGate, profile, stress, heldS
         pos != null
           ? Math.round(((pos.weightPct || 0) - (pos.targetWeightPct || 0)) * 10) / 10
           : null,
+      buyAmount: proposed?.amount || 0,
+      alreadyHeld: owned,
     });
   }
 
-  // Keep actionable + top WAIT items for UI
-  const priority = { EXIT: 0, REDUCE: 1, BUY: 2, ADD: 3, WAIT: 4, 'NO ACTION': 5 };
+  const priority = { EXIT: 0, REDUCE: 1, BUY: 2, ADD: 3, HOLD: 4, WAIT: 5, 'NO ACTION': 6 };
   return decisions.sort((a, b) => (priority[a.action] ?? 9) - (priority[b.action] ?? 9)).slice(0, 15);
 }

@@ -3,6 +3,8 @@
  * Always stamps data mode, asOf, and Pas LIVE BRVM.
  */
 
+import { getCompanyName } from '../data/companyNames.js';
+
 function csvEscape(v) {
   const s = v == null ? '' : String(v);
   if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
@@ -36,6 +38,7 @@ export function buildAllocationExportRows(result) {
   return (result?.allocation?.positions || []).map((p) => ({
     ...meta,
     symbol: p.symbol,
+    companyName: p.companyName || getCompanyName(p.symbol),
     decision: p.buyShares > 0 ? (p.alreadyHeld ? 'ADD' : 'BUY') : p.alreadyHeld ? 'HOLD' : '—',
     weight_actuel_pct: p.weightPct,
     weight_cible_pct: p.targetWeightPct,
@@ -59,6 +62,7 @@ export function buildDecisionsExportRows(result) {
     return {
       ...meta,
       symbol: d.symbol,
+      companyName: d.companyName || getCompanyName(d.symbol),
       action: d.action,
       score: d.score ?? '',
       confidence_pct: d.confidence != null ? Math.round(d.confidence * 100) : '',
@@ -81,9 +85,10 @@ export function buildPortfolioExportRows(result) {
   const rows = [];
   rows.push({
     ...meta,
-    section: 'CASH',
-    symbol: 'CASH_SPOT',
-    shares: '',
+      section: 'CASH',
+      symbol: 'CASH_SPOT',
+      companyName: 'Cash spot',
+      shares: '',
     avg_cost: '',
     price: '',
     market_value: result?.spotCash ?? result?.capital ?? 0,
@@ -98,6 +103,7 @@ export function buildPortfolioExportRows(result) {
       ...meta,
       section: 'HOLDING',
       symbol: h.symbol,
+      companyName: getCompanyName(h.symbol),
       shares: h.shares,
       avg_cost: h.avgCost ?? '',
       price: h.price ?? '',
