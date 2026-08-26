@@ -137,9 +137,11 @@ export function scoreSymbol(feature) {
   }
 
   let qualityLabel = 'INSUFFICIENT';
-  if (dq >= 0.75 && feature.observations >= 20) qualityLabel = 'VERIFIED';
-  else if (dq >= 0.45 && feature.observations >= 5) qualityLabel = 'SECONDARY';
-  else if (dq > 0 && feature.observations >= 1) qualityLabel = 'MISSING';
+  if (!insufficient) {
+    if (dq >= 0.75 && feature.observations >= 20) qualityLabel = 'VERIFIED';
+    else if (dq >= 0.45 && feature.observations >= 5) qualityLabel = 'SECONDARY';
+    else if (dq > 0 && feature.observations >= 1) qualityLabel = 'MISSING';
+  }
 
   return {
     symbol: feature.symbol,

@@ -1,8 +1,8 @@
 # README.md
 
-# BRVM Investment Engine V7.4.1
+# BRVM Investment Engine V7.5.0
 
-Moteur d’analyse BRVM — Predictor + portefeuille + historique annuel d’indice + base interne quotidienne (communauté) **jusqu’à J-1**.
+Moteur d’analyse BRVM — produit finalisé : persistance, export, guide, CSV confirmé, historique jusqu’à J-1.
 
 ## URL
 
@@ -16,13 +16,13 @@ DATA → PREDICTOR → PORTFOLIO → ALLOCATION → STRESS → DECISION → BACK
 
 | Mode | Live | Rôle |
 |------|------|------|
-| **INTERNAL** | NON | Tout l’historique public dispo jusqu’à **J-1** (IndexedDB) |
+| **INTERNAL** | NON | Tout l’historique public dispo jusqu’à **J-1** |
 | **SAMPLE** | NON | Démo bundlée |
-| **CSV** | NON | Import utilisateur |
-| **ANNUAL INDEX** | NON | Indice Composite 2006–2025 (régimes / stress / benchmark) |
+| **CSV** | NON | Import avec prévisualisation + confirmation |
+| **ANNUAL INDEX** | NON | Indice Composite 2006–2025 (PRICE_INDEX) |
 | **LIVE BRVM** | — | **Non utilisé** |
 
-Politique explicite : **pas de LIVE BRVM** — on consomme les données disponibles jusqu’à hier (J-1).
+Politique : **pas de LIVE BRVM** — asOf ≤ J-1 affiché clairement.
 
 L’historique annuel est un **PRICE_INDEX**, pas un TOTAL RETURN, pas des prix de titres, pas LIVE.
 

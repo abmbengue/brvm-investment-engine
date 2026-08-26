@@ -134,7 +134,7 @@ export function exportAnalysisCsv(result, kind = 'decisions') {
   const csv = toCsv(headers, rows);
   const mode = result?.dataStatus?.mode || 'NONE';
   const asOf = result?.dataStatus?.asOf || 'na';
-  const filename = `brvm-${kind}-${mode}-asOf-${asOf}-pas-LIVE.csv`.replace(/[^\w.\-]+/g, '_');
+  const filename = `brvm-${kind}-${mode}-asOf-${asOf}-pas-LIVE.csv`.replace(/[^\w.-]+/g, '_');
   return { csv, filename, rowCount: rows.length };
 }
 
