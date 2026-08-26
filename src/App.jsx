@@ -19,7 +19,7 @@ import './App.css';
 
 const ChartsPanel = lazy(() => import('./components/ChartsPanel.jsx'));
 
-const VERSION = '7.7.2';
+const VERSION = '7.7.3';
 const SAMPLE_CSV_URL = `${import.meta.env.BASE_URL}sample-brvm.csv`;
 const ANNUAL_HISTORY_URL = `${import.meta.env.BASE_URL}data/BRVM_HISTORICAL_2006_2025_ANNUAL.csv`;
 const YEAR_SELECT_MIN = 2000;
