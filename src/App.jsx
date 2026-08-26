@@ -4,10 +4,12 @@ import { formatMoneyLabel } from './lib/money.js';
 import { runEngine } from './engine/pipeline.js';
 import { RISK_PROFILES } from './engine/profiles.js';
 import { loadMarketData, loadFromCsvText, refreshInternalHistoricalDb } from './data/loadMarketData.js';
+import { loadBundledAnnualHistory } from './data/historical/HistoricalMarketData.js';
 import './App.css';
 
-const VERSION = '7.3.0';
+const VERSION = '7.4.0';
 const SAMPLE_CSV_URL = `${import.meta.env.BASE_URL}sample-brvm.csv`;
+const ANNUAL_HISTORY_URL = `${import.meta.env.BASE_URL}data/BRVM_HISTORICAL_2006_2025_ANNUAL.csv`;
 const EMPTY_HOLDING = () => ({
   id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
   symbol: '',
@@ -18,6 +20,12 @@ const EMPTY_HOLDING = () => ({
 function pct(x) {
   if (x === null || x === undefined || Number.isNaN(x)) return '—';
   return `${(x * 100).toFixed(1)}%`;
+}
+
+function qualityClass(q) {
+  if (q === 'VERIFIED') return 'green';
+  if (q === 'SECONDARY') return 'yellow';
+  return 'red';
 }
 
 function gateClass(status) {
@@ -46,6 +54,7 @@ export default function App() {
   const [liveStatusMessage, setLiveStatusMessage] = useState('Données temps réel non connectées.');
   const [commitSignal, setCommitSignal] = useState(0);
   const [holdingRows, setHoldingRows] = useState([EMPTY_HOLDING()]);
+  const [annualHistory, setAnnualHistory] = useState(null);
 
   const holdingsInput = useMemo(
     () =>
@@ -116,6 +125,21 @@ export default function App() {
     };
   }, [applyProviderResult]);
 
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const hist = await loadBundledAnnualHistory(ANNUAL_HISTORY_URL);
+        if (!cancelled) setAnnualHistory(hist);
+      } catch {
+        if (!cancelled) setAnnualHistory(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const recalculate = useCallback(() => {
     setCommitSignal((s) => s + 1);
   }, []);
@@ -130,8 +154,9 @@ export default function App() {
         profileId,
         csvResult,
         holdings: holdingsInput,
+        annualHistory,
       }),
-    [capital, monthly, years, rate, profileId, csvResult, holdingsInput]
+    [capital, monthly, years, rate, profileId, csvResult, holdingsInput, annualHistory]
   );
 
   async function onCsvFile(file) {
@@ -647,6 +672,10 @@ export default function App() {
         <p className={result.backtest.validated ? 'green' : 'yellow'}>
           <b>{result.backtest.status}</b>
         </p>
+        <p className="small muted">
+          L’historique annuel d’indice (PRICE_INDEX) ne valide pas un backtest titres. Schéma
+          quotidien futur requis : date,symbol,open,high,low,close,volume.
+        </p>
         {result.backtest.validated && result.backtest.metrics && (
           <>
             <p className="small muted">
@@ -683,6 +712,59 @@ export default function App() {
               </tbody>
             </table>
           </>
+        )}
+      </section>
+
+      <section className="panel" id="annual-history-panel">
+        <h2>Historique annuel BRVM Composite (2006–2025)</h2>
+        <p className="muted small">
+          Série <b>PRICE_INDEX</b> annuelle — pas TOTAL RETURN, pas LIVE, pas prix de titres. Qualité
+          affichée : VERIFIED / SECONDARY / MISSING. Aucune donnée manquante inventée.
+        </p>
+        {result.historicalMarketData?.ok ? (
+          <>
+            <p className="small">
+              {result.historicalMarketData.yearCount} années ·{' '}
+              {result.historicalMarketData.yearStart}–{result.historicalMarketData.yearEnd} · VERIFIED{' '}
+              {result.historicalMarketData.qualityCounts?.VERIFIED ?? 0} · SECONDARY{' '}
+              {result.historicalMarketData.qualityCounts?.SECONDARY ?? 0} · MISSING{' '}
+              {result.historicalMarketData.qualityCounts?.MISSING ?? 0}
+            </p>
+            <p className="yellow small">
+              <b>{result.historicalMarketData.stockBacktestMessage}</b>
+            </p>
+            <table>
+              <thead>
+                <tr>
+                  <th>Année</th>
+                  <th>Indice fin d’année</th>
+                  <th>Rendement</th>
+                  <th>Régime</th>
+                  <th>Qualité</th>
+                  <th>Source rendement</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(result.historicalMarketData.benchmark || []).map((b) => {
+                  const regime = (result.historicalMarketData.regimes || []).find(
+                    (r) => r.year === b.year
+                  );
+                  return (
+                    <tr key={b.year}>
+                      <td>{b.year}</td>
+                      <td>{b.indexYearEnd != null ? b.indexYearEnd.toFixed(2) : '—'}</td>
+                      <td>{pct(b.annualReturn)}</td>
+                      <td>{regime?.regime || '—'}</td>
+                      <td className={qualityClass(b.quality)}>{b.quality}</td>
+                      <td className="small muted">{b.returnSource || '—'}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </>
+        ) : (
+          <p className="yellow">Historique annuel d’indice non chargé.</p>
         )}
       </section>
 

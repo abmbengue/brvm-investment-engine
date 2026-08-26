@@ -1,23 +1,53 @@
 # DATA-SCHEMA.md
 
-## Statut actuel (V7.3.0)
+## Statut actuel (V7.4.0)
 
 | Mode | Live | Disponible |
 |------|------|------------|
 | INTERNAL | NON | OUI — base historique locale (IndexedDB) |
 | SAMPLE | NON | OUI (fallback) |
 | CSV | NON | OUI (import + fusion interne) |
+| ANNUAL_INDEX | NON | OUI — BRVM Composite année de fin 2006–2025 |
 | LIVE BRVM | — | **NON** — contrat officiel requis |
 
-Message : base interne historique active **≠** flux BRVM live.
+Message : base interne / indice annuel **≠** flux BRVM live.
 
-## Base interne
+## Historique annuel (PRICE_INDEX)
+
+Fichier : `public/data/BRVM_HISTORICAL_2006_2025_ANNUAL.csv`
+
+Colonnes :
+
+```
+year,brvm_composite_year_end,quality,notes
+```
+
+- `quality` ∈ `VERIFIED` | `SECONDARY` | `MISSING`
+- Niveau d’indice ou rendement manquant → `null` (jamais inventé)
+- Rendement YoY dérivé **uniquement** si deux niveaux d’indice consécutifs existent
+- `seriesType` = `PRICE_INDEX` (pas `TOTAL_RETURN`)
+- Interdit : expansion en daily fake, prix de titres inventés, label LIVE, backtest titres « validé »
+
+Module : `src/data/historical/HistoricalMarketData.js`
+
+Usages autorisés : régimes, scénarios stress, benchmark annuel, sanity checks.
+
+## Schéma quotidien futur (non rempli)
+
+```
+date,symbol,open,high,low,close,volume
+```
+
+Constante : `src/data/historical/dailySchema.js`  
+Tant qu’absent / non officiel : `BACKTEST TITRES NON VALIDÉ — HISTORIQUE QUOTIDIEN INSUFFISANT`
+
+## Base interne daily (communauté)
 
 Construit à partir de séries historiques publiques :
 `https://github.com/Fredysessie/brvm-data-public`
 
 Univers cœur : SNTS, BOAB, ORAC, SGBC, ETIT, CABC, ECOC, TTLC, SHEC, SIVC, SDCC, CIEC  
-Fenêtre : ~3 ans de daily bars.
+Fenêtre : ~3 ans de daily bars. **≠** feed officiel BRVM.
 
 ## Architecture
 
@@ -25,6 +55,7 @@ Fenêtre : ~3 ans de daily bars.
 DATA SOURCE → DATA ADAPTER → NORMALIZER → QUALITY GATE
 → FEATURE ENGINE → PREDICTOR → PORTFOLIO → ALLOCATION
 → STRESS → DECISION → BACKTEST → AUDIT → UI
+         ↗ HistoricalMarketData (annual index)
 ```
 
 Providers (`src/data/`) :
@@ -32,12 +63,10 @@ Providers (`src/data/`) :
 - `brvmOfficialStub` — jamais live tant que non souscrit
 - `csvProvider` — upload utilisateur
 - `sampleProvider` — CSV SAMPLE bundlé
+- `internalDb` — IndexedDB
+- `historical/HistoricalMarketData` — indice annuel
 
-Interface conceptuelle `DataProvider` :
-
-- `getQuotes()` / `getHistory()` / `getFundamentals()` / `getMetadata()` / `isAvailable()`
-
-## Modèle interne
+## Modèle interne daily
 
 Minimum : `date,symbol,close,volume`  
 Enrichi (nullable) : `pe,dividendYield,roe,revenueGrowth,debtEquity,marketCap,sharesOutstanding`
@@ -46,14 +75,7 @@ Champ absent → `null` (jamais inventé).
 
 ## Source officielle BRVM
 
-Les flux temps réel / fin de journée BRVM sont des **services sous contrat**  
-(FIX, web-services, livraison EOD) — pas d’API publique gratuite documentée.
-
-Références :
-
-- https://www.brvm.org/en/real-time-data-feed
-- https://www.brvm.org/en/end-day-data
-- https://www.brvm.org/en/services/catalogues-de-services
+Les flux temps réel / fin de journée BRVM sont des **services sous contrat**.
 
 Pour activer un vrai LIVE plus tard : backend/serverless + credentials hors frontend.
 

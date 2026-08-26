@@ -1,7 +1,17 @@
 # VERSION.md
 
-- **Version** : 7.3.0
+- **Version** : 7.4.0
 - **Date** : 2026-08-26
+
+## 7.4.0
+
+- Module **HistoricalMarketData** — indice BRVM Composite annuel 2006–2025
+- Régimes de marché, calibration stress, benchmark annuel
+- Qualité **VERIFIED / SECONDARY / MISSING** affichée
+- Série **PRICE_INDEX** (pas TOTAL RETURN, pas LIVE)
+- Message : `BACKTEST TITRES NON VALIDÉ — HISTORIQUE QUOTIDIEN INSUFFISANT`
+- Schéma quotidien futur préparé : `date,symbol,open,high,low,close,volume`
+- Aucune invention de prix / daily à partir de l’annuel
 
 ## 7.3.0
 

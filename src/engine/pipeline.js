@@ -18,6 +18,7 @@ import {
  * capital = cash disponible SPOT à investir maintenant
  * monthly = apport mensuel futur (simulation patrimoniale)
  * holdings = portefeuille déjà acheté [{symbol, shares, avgCost?}]
+ * annualHistory = contexte HistoricalMarketData (indice annuel, jamais LIVE)
  */
 export function runEngine({
   capital,
@@ -27,6 +28,7 @@ export function runEngine({
   profileId,
   csvResult,
   holdings: holdingsInput = [],
+  annualHistory = null,
 }) {
   const rate = (Number(annualRatePct) || 0) / 100;
   const y = Math.max(1, Math.trunc(Number(years) || 1));
@@ -55,6 +57,7 @@ export function runEngine({
       : selectPortfolio(ranked, profileId, heldSymbols);
 
   const allocation = allocate(selection.selected, spotCash, profileId, marked);
+  const hist = annualHistory?.ok ? annualHistory : null;
   const stress = runStress({
     capital: spotCash + (marked.marketValue || 0),
     monthly: m,
@@ -62,6 +65,7 @@ export function runEngine({
     centralRate: rate,
     allocation,
     profileId,
+    historicalCalibration: hist?.stressCalibration || null,
   });
   const decisions = decide({
     ranked,
@@ -72,6 +76,12 @@ export function runEngine({
     heldSymbols,
   });
   const backtest = runBacktest(rows, profileId);
+  // Annual index never validates a stock backtest
+  if (!backtest.validated) {
+    backtest.status =
+      hist?.stockBacktestMessage ||
+      'BACKTEST TITRES NON VALIDÉ — HISTORIQUE QUOTIDIEN INSUFFISANT';
+  }
   // Patrimonial sim: spot cash + future monthly (holdings are separate stock positions)
   const projections = buildProjections(spotCash, m, rate, y);
   const finalValue = futureValue(spotCash, m, rate, y);
@@ -93,6 +103,36 @@ export function runEngine({
     decisions,
     qualityGate,
     backtest,
+    historicalMarketData: hist
+      ? {
+          ok: true,
+          live: false,
+          kind: 'ANNUAL_INDEX',
+          seriesType: hist.seriesType || 'PRICE_INDEX',
+          yearCount: hist.meta?.yearCount ?? hist.points?.length ?? 0,
+          yearStart: hist.meta?.yearStart ?? null,
+          yearEnd: hist.meta?.yearEnd ?? null,
+          qualityCounts: hist.meta?.qualityCounts || null,
+          missingIndexYears: hist.meta?.missingIndexYears || [],
+          regimes: hist.regimes || [],
+          benchmark: hist.benchmark || [],
+          stressCalibration: hist.stressCalibration || null,
+          stockBacktestValidated: false,
+          stockBacktestMessage:
+            hist.stockBacktestMessage ||
+            'BACKTEST TITRES NON VALIDÉ — HISTORIQUE QUOTIDIEN INSUFFISANT',
+          note: hist.meta?.note || null,
+        }
+      : {
+          ok: false,
+          live: false,
+          kind: 'ANNUAL_INDEX',
+          seriesType: 'PRICE_INDEX',
+          stockBacktestValidated: false,
+          stockBacktestMessage:
+            'BACKTEST TITRES NON VALIDÉ — HISTORIQUE QUOTIDIEN INSUFFISANT',
+          message: 'Historique annuel d’indice non chargé',
+        },
     projections,
     finalValue,
     contributed,

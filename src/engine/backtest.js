@@ -37,7 +37,7 @@ function periodReturn(rows, symbols) {
 
 export function runBacktest(rows, profileId = 'equilibre') {
   const empty = {
-    status: 'BACKTEST NON VALIDÉ — DONNÉES HISTORIQUES INSUFFISANTES',
+    status: 'BACKTEST TITRES NON VALIDÉ — HISTORIQUE QUOTIDIEN INSUFFISANT',
     validated: false,
     metrics: null,
     splits: null,

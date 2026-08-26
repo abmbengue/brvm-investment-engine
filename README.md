@@ -1,8 +1,8 @@
 # README.md
 
-# BRVM Investment Engine V7.1.0-PREPARED
+# BRVM Investment Engine V7.4.0
 
-Moteur d’analyse BRVM — base stable V7.0.1 + couche data prête pour une future source autorisée.
+Moteur d’analyse BRVM — Predictor + portefeuille + historique annuel d’indice + base interne quotidienne (communauté).
 
 ## URL
 
@@ -14,11 +14,17 @@ DATA → PREDICTOR → PORTFOLIO → ALLOCATION → STRESS → DECISION → BACK
 
 ## Données
 
-- **SAMPLE** : chargé par défaut (pas live)
-- **CSV** : import utilisateur
-- **LIVE** : non connecté (contrat BRVM requis)
+| Mode | Live | Rôle |
+|------|------|------|
+| **INTERNAL** | NON | Daily OHLC communauté (IndexedDB) pour Predictor |
+| **SAMPLE** | NON | Démo bundlée |
+| **CSV** | NON | Import utilisateur |
+| **ANNUAL INDEX** | NON | Indice Composite 2006–2025 (régimes / stress / benchmark) |
+| **LIVE BRVM** | — | Non connecté (contrat officiel requis) |
 
-Affiche clairement : *Données temps réel non connectées.*
+L’historique annuel est un **PRICE_INDEX**, pas un TOTAL RETURN, pas des prix de titres, pas LIVE.
+
+Backtest titres : **`BACKTEST TITRES NON VALIDÉ — HISTORIQUE QUOTIDIEN INSUFFISANT`** tant qu’un dataset quotidien officiel/autorisé (`date,symbol,open,high,low,close,volume`) n’est pas branché.
 
 ## Démarrage
 
