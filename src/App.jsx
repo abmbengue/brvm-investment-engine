@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback } from 'react';
+import { useMemo, useState, useCallback, useEffect } from 'react';
 import MoneyInput from './components/MoneyInput.jsx';
 import { parseCsv } from './lib/csv.js';
 import { formatMoneyLabel } from './lib/money.js';
@@ -6,7 +6,8 @@ import { runEngine } from './engine/pipeline.js';
 import { RISK_PROFILES } from './engine/profiles.js';
 import './App.css';
 
-const VERSION = '7.0.0';
+const VERSION = '7.0.1';
+const SAMPLE_CSV_URL = `${import.meta.env.BASE_URL}sample-brvm.csv`;
 
 function pct(x) {
   if (x === null || x === undefined || Number.isNaN(x)) return '—';
@@ -14,8 +15,8 @@ function pct(x) {
 }
 
 function gateClass(status) {
-  if (status === 'PASS') return 'green';
   if (status === 'WARNING' || status === 'READY' || status === 'GATE') return 'yellow';
+  if (status === 'PASS') return 'green';
   return 'red';
 }
 
@@ -26,8 +27,50 @@ export default function App() {
   const [rate, setRate] = useState(9);
   const [profileId, setProfileId] = useState('equilibre');
   const [csvResult, setCsvResult] = useState(null);
-  const [csvMessage, setCsvMessage] = useState('Aucun CSV importé — statut données : NONE');
+  const [csvMessage, setCsvMessage] = useState('Chargement SAMPLE…');
+  const [dataSource, setDataSource] = useState('NONE');
   const [commitSignal, setCommitSignal] = useState(0);
+
+  const applyCsvText = useCallback((text, source) => {
+    const parsed = parseCsv(text);
+    setCsvResult(parsed);
+    if (parsed.ok) {
+      setDataSource(source);
+      const tag = source === 'SAMPLE' ? 'SAMPLE (pas un flux live)' : 'CSV utilisateur (pas un flux live)';
+      setCsvMessage(
+        `${source} : ${parsed.importedRows} lignes, ${parsed.symbols.length} titres (délimiteur « ${parsed.delimiter} »). Statut : ${tag}.`
+      );
+    } else {
+      setDataSource('NONE');
+      setCsvMessage(`Import échoué : ${parsed.errors.join(' ; ') || 'fichier invalide'}`);
+    }
+    return parsed;
+  }, []);
+
+  const loadSample = useCallback(async () => {
+    setCsvMessage('Chargement SAMPLE…');
+    const res = await fetch(SAMPLE_CSV_URL);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const text = await res.text();
+    return applyCsvText(text, 'SAMPLE');
+  }, [applyCsvText]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        await loadSample();
+      } catch (e) {
+        if (!cancelled) {
+          setDataSource('NONE');
+          setCsvMessage(`SAMPLE indisponible — importez un CSV. (${e.message})`);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [loadSample]);
 
   const recalculate = useCallback(() => {
     setCommitSignal((s) => s + 1);
@@ -49,15 +92,7 @@ export default function App() {
   async function onCsvFile(file) {
     if (!file) return;
     const text = await file.text();
-    const parsed = parseCsv(text);
-    setCsvResult(parsed);
-    if (parsed.ok) {
-      setCsvMessage(
-        `CSV importé : ${parsed.importedRows} lignes, ${parsed.symbols.length} titres (délimiteur « ${parsed.delimiter} »). Flux live : NON.`
-      );
-    } else {
-      setCsvMessage(`Import échoué : ${parsed.errors.join(' ; ') || 'fichier invalide'}`);
-    }
+    applyCsvText(text, 'CSV');
   }
 
   return (
@@ -181,7 +216,10 @@ export default function App() {
       <section className="panel">
         <h2>Données BRVM — import CSV</h2>
         <p className="muted small">
-          Statut : <b className={result.dataStatus.live ? 'red' : 'yellow'}>{result.dataStatus.mode}</b>
+          Statut :{' '}
+          <b className={result.dataStatus.live ? 'red' : 'yellow'} id="data-source">
+            {dataSource === 'SAMPLE' ? 'SAMPLE' : result.dataStatus.mode}
+          </b>
           {' — '}
           Flux live : <b>NON</b>. Authentification / API privée / paywall non contournés.
         </p>
@@ -192,7 +230,14 @@ export default function App() {
             accept=".csv,text/csv"
             onChange={(e) => onCsvFile(e.target.files?.[0])}
           />
-          <a className="badge" href="/sample-brvm.csv" download>
+          <button
+            type="button"
+            id="load-sample"
+            onClick={() => loadSample().catch((e) => setCsvMessage(`SAMPLE : ${e.message}`))}
+          >
+            CHARGER SAMPLE
+          </button>
+          <a className="badge" href={SAMPLE_CSV_URL} download>
             Télécharger CSV d&apos;exemple (SAMPLE)
           </a>
         </div>

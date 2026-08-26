@@ -1,23 +1,19 @@
 # DEPLOYMENT.md
 
-## Blocage actuel
+## URL publique (active)
 
-Ce cloud agent a été lancé **sans dépôt GitHub** (`repoUrl = null`) et sans credentials `gh` / Vercel.
+https://abmbengue.github.io/brvm-investment-engine/
 
-Conséquences :
+- Hébergeur : **GitHub Pages** (branche `gh-pages`)
+- Code source : https://github.com/abmbengue/brvm-investment-engine
+- Branche source : `main`
 
-- impossible de pousser sur le dépôt existant ;
-- impossible de déployer via le projet Vercel existant ;
-- **URL publique : NON DISPONIBLE**.
+## Vercel
 
-## Pour déployer (action utilisateur)
+Non connecté dans cet environnement (`VERCEL_TOKEN` absent).  
+`vercel.json` est prêt si un projet Vercel est lié plus tard.
 
-1. Relancer un agent Cursor en sélectionnant le dépôt GitHub du BRVM Investment Engine
-   **ou** coller l’URL du dépôt + accès clone.
-2. Si Vercel est déjà lié au dépôt : `vercel --prod` / push sur la branche de production.
-3. Sinon : connecter le projet `brvm-investment-engine` à Vercel (Root Directory = ce dossier).
-
-## Build local vérifié
+## Build local
 
 ```bash
 npm install
@@ -27,4 +23,9 @@ npm run build
 npm run preview
 ```
 
-Build PASS localement (voir `TEST-REPORT.md`).
+## Redeploy Pages
+
+```bash
+VITE_BASE=/brvm-investment-engine/ npm run build
+# publier le contenu de dist/ sur la branche gh-pages
+```
