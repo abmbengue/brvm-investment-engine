@@ -1,36 +1,53 @@
 # DATA-SCHEMA.md
 
-## Source
+## Statut actuel (V7.1.0-PREPARED)
 
-| Mode | Description |
-|------|-------------|
-| CSV | Seule source autorisée livrée |
-| LIVE | Non connecté |
+| Mode | Live | Disponible |
+|------|------|------------|
+| SAMPLE | NON | OUI (bundlé) |
+| CSV | NON | OUI (import utilisateur) |
+| LIVE BRVM | — | **NON** — contrat / API autorisée requis |
 
-## CSV minimum
+Message UI : **Données temps réel non connectées.**
 
-```
-date,symbol,close,volume
-```
-
-## CSV enrichi
+## Architecture
 
 ```
-date,symbol,close,volume,pe,dividendYield,roe,revenueGrowth,debtEquity
+DATA SOURCE → DATA ADAPTER → NORMALIZER → QUALITY GATE
+→ FEATURE ENGINE → PREDICTOR → PORTFOLIO → ALLOCATION
+→ STRESS → DECISION → BACKTEST → AUDIT → UI
 ```
 
-## Règles
+Providers (`src/data/`) :
 
-- Délimiteurs : `,` ou `;`
-- Prix ≤ 0 → rejet
-- Volume < 0 → rejet ; volume 0 accepté mais pénalisé
-- Doublons `(date,symbol)` → conservé une fois
-- Dates désordonnées → tri chronologique
-- Fondamentaux absents → `null` (jamais inventés)
+- `brvmOfficialStub` — jamais live tant que non souscrit
+- `csvProvider` — upload utilisateur
+- `sampleProvider` — CSV SAMPLE bundlé
 
-## Pipeline
+Interface conceptuelle `DataProvider` :
 
-```
-DATA SOURCE → ADAPTER (CSV) → NORMALIZER → QUALITY GATE
-→ FEATURE ENGINE → PREDICTOR → PORTFOLIO → DECISION → UI
-```
+- `getQuotes()` / `getHistory()` / `getFundamentals()` / `getMetadata()` / `isAvailable()`
+
+## Modèle interne
+
+Minimum : `date,symbol,close,volume`  
+Enrichi (nullable) : `pe,dividendYield,roe,revenueGrowth,debtEquity,marketCap,sharesOutstanding`
+
+Champ absent → `null` (jamais inventé).
+
+## Source officielle BRVM
+
+Les flux temps réel / fin de journée BRVM sont des **services sous contrat**  
+(FIX, web-services, livraison EOD) — pas d’API publique gratuite documentée.
+
+Références :
+
+- https://www.brvm.org/en/real-time-data-feed
+- https://www.brvm.org/en/end-day-data
+- https://www.brvm.org/en/services/catalogues-de-services
+
+Pour activer un vrai LIVE plus tard : backend/serverless + credentials hors frontend.
+
+## Sécurité
+
+Aucune clé API dans le frontend / GitHub Pages.

@@ -28,7 +28,12 @@ export function runEngine({
   const rows = csvResult?.ok ? csvResult.rows : [];
   const features = rows.length ? buildFeatures(rows) : [];
   const ranked = features.length ? rankUniverse(features) : [];
-  const qualityGate = evaluateQualityGate({ csvResult, features, ranked });
+  const qualityGate = evaluateQualityGate({
+    csvResult,
+    features,
+    ranked,
+    meta: csvResult?.meta || null,
+  });
 
   const selection =
     qualityGate.status === 'BLOCKED'
@@ -76,20 +81,25 @@ export function runEngine({
     gain: finalValue - contributed,
     dataStatus: csvResult?.ok
       ? {
-          mode: 'CSV',
-          live: false,
+          mode: csvResult.meta?.mode || 'CSV',
+          live: Boolean(csvResult.meta?.live),
           rows: csvResult.importedRows,
           symbols: csvResult.symbols.length,
           delimiter: csvResult.delimiter,
           rejected: csvResult.rejectedRows,
           duplicates: csvResult.duplicatesRemoved,
+          asOf: csvResult.meta?.asOf || null,
+          sourceLabel: csvResult.meta?.sourceLabel || null,
         }
       : {
           mode: 'NONE',
           live: false,
           rows: 0,
           symbols: 0,
-          message: 'Aucune source autorisée connectée — importez un CSV',
+          message: 'Données temps réel non connectées. Importez un CSV ou chargez SAMPLE.',
         },
+    liveStatusMessage: csvResult?.meta?.live
+      ? `LIVE — ${csvResult.meta.sourceLabel}`
+      : 'Données temps réel non connectées.',
   };
 }

@@ -1,31 +1,30 @@
 # DEPLOYMENT.md
 
-## URL publique (active)
+## Production
 
 https://abmbengue.github.io/brvm-investment-engine/
 
-- Hébergeur : **GitHub Pages** (branche `gh-pages`)
-- Code source : https://github.com/abmbengue/brvm-investment-engine
-- Branche source : `main`
+- Repo : https://github.com/abmbengue/brvm-investment-engine
+- Tag stable : `v7.0.1-stable`
+- Branche Pages : `gh-pages`
+- Version courante : **V7.1.0-PREPARED**
 
 ## Vercel
 
-Non connecté dans cet environnement (`VERCEL_TOKEN` absent).  
-`vercel.json` est prêt si un projet Vercel est lié plus tard.
+Non connecté (`VERCEL_TOKEN` absent). `vercel.json` prêt.
 
-## Build local
+## Build
 
 ```bash
 npm install
 npm test
 npm run lint
 npm run build
-npm run preview
 ```
 
-## Redeploy Pages
+Pages :
 
 ```bash
 VITE_BASE=/brvm-investment-engine/ npm run build
-# publier le contenu de dist/ sur la branche gh-pages
+# publier dist/ → branche gh-pages
 ```

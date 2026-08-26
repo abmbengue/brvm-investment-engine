@@ -1,21 +1,24 @@
 # VERSION.md
 
-- **Version** : 7.0.1
-- **Base** : V7.0.0 opérationnelle
+- **Version** : 7.1.0-PREPARED
+- **Stable tag** : `v7.0.1-stable` (production précédente)
 - **Stack** : Vite + React 19
 - **Date** : 2026-08-26
 
+## 7.1.0-PREPARED
+
+- Couche DataProvider / Adapter / Normalizer
+- Stub BRVM officiel (contrat requis) — **non connecté**
+- SAMPLE + CSV inchangés et prioritaires en fallback
+- Indicateur DATA STATUS (SAMPLE / CSV / LIVE / NONE)
+- Message explicite : « Données temps réel non connectées. »
+- **LIVE = NO**
+
 ## 7.0.1
 
-- Chargement automatique du CSV SAMPLE au démarrage (étiquette claire SAMPLE, pas live)
-- Bouton CHARGER SAMPLE
-- Déploiement public GitHub Pages
+- Auto-load SAMPLE + bouton CHARGER SAMPLE
+- Déploiement GitHub Pages
 
 ## 7.0.0
 
-- parseMoney / formatMoney uniques
-- recalcul réel capital / apport / horizon / taux / profil
-- pipeline DATA→…→AUDIT opérationnel
-- import CSV + Quality Gate
-- predictor / allocation / stress / decision / backtest
-- documentation + tests
+- Moteur complet + tests

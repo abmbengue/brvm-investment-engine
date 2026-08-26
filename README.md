@@ -1,31 +1,35 @@
-# BRVM Investment Engine V7.0.0
+# README.md
 
-Moteur d’analyse et de simulation pour le marché BRVM.
+# BRVM Investment Engine V7.1.0-PREPARED
+
+Moteur d’analyse BRVM — base stable V7.0.1 + couche data prête pour une future source autorisée.
+
+## URL
+
+https://abmbengue.github.io/brvm-investment-engine/
 
 ## Chaîne
 
 DATA → PREDICTOR → PORTFOLIO → ALLOCATION → STRESS → DECISION → BACKTEST → AUDIT
 
+## Données
+
+- **SAMPLE** : chargé par défaut (pas live)
+- **CSV** : import utilisateur
+- **LIVE** : non connecté (contrat BRVM requis)
+
+Affiche clairement : *Données temps réel non connectées.*
+
 ## Démarrage
 
 ```bash
 npm install
-npm run dev
+npm test
+npm run lint
+npm run build
+npm run preview
 ```
-
-Scripts :
-
-- `npm test` — tests unitaires
-- `npm run lint` — oxlint
-- `npm run build` — build production
-- `npm run preview` — servir le build
-
-## Données
-
-Aucune API live n’est connectée. Importez un CSV (`date,symbol,close,volume` + colonnes optionnelles).
-
-Un fichier d’exemple SAMPLE est disponible : `/sample-brvm.csv`.
 
 ## Avertissement
 
-Les projections sont des **hypothèses**, jamais des garanties. Aucun ordre de bourse n’est passé.
+Projections = hypothèses, jamais des garanties. Aucun ordre de bourse.

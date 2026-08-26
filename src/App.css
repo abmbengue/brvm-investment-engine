@@ -50,6 +50,19 @@ th{color:#8b99b2}
   text-decoration:none;
   background:#0d1828;
 }
+.data-status{
+  display:inline-block;
+  padding:4px 10px;
+  border-radius:8px;
+  font-size:11px;
+  font-weight:700;
+  border:1px solid #40536f;
+  margin-right:6px;
+}
+.status-live{background:#10291e;border-color:#315f44;color:#7bd79f}
+.status-sample{background:#102038;border-color:#3d5f8a;color:#78a9ff}
+.status-csv{background:#211d10;border-color:#665526;color:#efcf79}
+.status-blocked{background:#241313;border-color:#693b3b;color:#ef8e8e}
 .flow{display:flex;gap:7px;overflow:auto}
 .flow div{min-width:135px;border:1px solid #33445e;border-radius:9px;padding:10px}
 .small{font-size:11px}

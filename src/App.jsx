@@ -1,12 +1,12 @@
 import { useMemo, useState, useCallback, useEffect } from 'react';
 import MoneyInput from './components/MoneyInput.jsx';
-import { parseCsv } from './lib/csv.js';
 import { formatMoneyLabel } from './lib/money.js';
 import { runEngine } from './engine/pipeline.js';
 import { RISK_PROFILES } from './engine/profiles.js';
+import { loadMarketData, loadFromCsvText } from './data/loadMarketData.js';
 import './App.css';
 
-const VERSION = '7.0.1';
+const VERSION = '7.1.0-PREPARED';
 const SAMPLE_CSV_URL = `${import.meta.env.BASE_URL}sample-brvm.csv`;
 
 function pct(x) {
@@ -20,6 +20,13 @@ function gateClass(status) {
   return 'red';
 }
 
+function dataStatusBadge(mode, live) {
+  if (live && mode === 'LIVE') return { label: 'LIVE', className: 'status-live' };
+  if (mode === 'SAMPLE') return { label: 'SAMPLE', className: 'status-sample' };
+  if (mode === 'CSV') return { label: 'CSV', className: 'status-csv' };
+  return { label: mode === 'BLOCKED' ? 'BLOCKED' : 'NONE', className: 'status-blocked' };
+}
+
 export default function App() {
   const [capital, setCapital] = useState(5_000_000);
   const [monthly, setMonthly] = useState(500_000);
@@ -29,40 +36,44 @@ export default function App() {
   const [csvResult, setCsvResult] = useState(null);
   const [csvMessage, setCsvMessage] = useState('Chargement SAMPLE…');
   const [dataSource, setDataSource] = useState('NONE');
+  const [liveStatusMessage, setLiveStatusMessage] = useState('Données temps réel non connectées.');
   const [commitSignal, setCommitSignal] = useState(0);
 
-  const applyCsvText = useCallback((text, source) => {
-    const parsed = parseCsv(text);
-    setCsvResult(parsed);
-    if (parsed.ok) {
-      setDataSource(source);
-      const tag = source === 'SAMPLE' ? 'SAMPLE (pas un flux live)' : 'CSV utilisateur (pas un flux live)';
+  const applyProviderResult = useCallback((loaded) => {
+    const compat = loaded.csvCompat;
+    setCsvResult(compat);
+    setLiveStatusMessage(loaded.liveStatusMessage || 'Données temps réel non connectées.');
+    if (compat?.ok) {
+      const mode = loaded.meta?.mode || compat.meta?.mode || 'CSV';
+      setDataSource(mode);
       setCsvMessage(
-        `${source} : ${parsed.importedRows} lignes, ${parsed.symbols.length} titres (délimiteur « ${parsed.delimiter} »). Statut : ${tag}.`
+        `${mode} : ${compat.importedRows} lignes, ${compat.symbols.length} titres. ${loaded.liveStatusMessage}`
       );
     } else {
       setDataSource('NONE');
-      setCsvMessage(`Import échoué : ${parsed.errors.join(' ; ') || 'fichier invalide'}`);
+      setCsvMessage(
+        `Source indisponible — ${[...(loaded.errors || []), ...(loaded.officialErrors || [])].join(' ; ') || 'fallback requis'}`
+      );
     }
-    return parsed;
+    return loaded;
   }, []);
 
   const loadSample = useCallback(async () => {
     setCsvMessage('Chargement SAMPLE…');
-    const res = await fetch(SAMPLE_CSV_URL);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const text = await res.text();
-    return applyCsvText(text, 'SAMPLE');
-  }, [applyCsvText]);
+    const loaded = await loadMarketData({ sampleUrl: SAMPLE_CSV_URL, preferSample: true });
+    return applyProviderResult(loaded);
+  }, [applyProviderResult]);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        await loadSample();
+        const loaded = await loadMarketData({ sampleUrl: SAMPLE_CSV_URL });
+        if (!cancelled) applyProviderResult(loaded);
       } catch (e) {
         if (!cancelled) {
           setDataSource('NONE');
+          setLiveStatusMessage('Données temps réel non connectées.');
           setCsvMessage(`SAMPLE indisponible — importez un CSV. (${e.message})`);
         }
       }
@@ -70,7 +81,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [loadSample]);
+  }, [applyProviderResult]);
 
   const recalculate = useCallback(() => {
     setCommitSignal((s) => s + 1);
@@ -92,8 +103,11 @@ export default function App() {
   async function onCsvFile(file) {
     if (!file) return;
     const text = await file.text();
-    applyCsvText(text, 'CSV');
+    const loaded = await loadFromCsvText(text);
+    applyProviderResult(loaded);
   }
+
+  const badge = dataStatusBadge(result.dataStatus.mode || dataSource, result.dataStatus.live);
 
   return (
     <main className="app">
@@ -102,6 +116,14 @@ export default function App() {
         <p className="muted">
           Moteur opérationnel : DATA → PREDICTOR → PORTFOLIO → ALLOCATION → STRESS → DECISION →
           BACKTEST → AUDIT. Simulation ≠ garantie. Aucun ordre réel. Aucun flux live inventé.
+        </p>
+        <p className="small">
+          <span id="data-status-badge" className={`data-status ${badge.className}`}>
+            DATA STATUS · {badge.label}
+          </span>{' '}
+          <span className="muted" id="live-status-msg">
+            {liveStatusMessage || result.liveStatusMessage}
+          </span>
         </p>
         <div className="toolbar">
           <MoneyInput
@@ -218,10 +240,11 @@ export default function App() {
         <p className="muted small">
           Statut :{' '}
           <b className={result.dataStatus.live ? 'red' : 'yellow'} id="data-source">
-            {dataSource === 'SAMPLE' ? 'SAMPLE' : result.dataStatus.mode}
+            {badge.label}
           </b>
           {' — '}
-          Flux live : <b>NON</b>. Authentification / API privée / paywall non contournés.
+          <span id="live-flag">Flux live : <b>{result.dataStatus.live ? 'OUI' : 'NON'}</b></span>.
+          Authentification / API privée / paywall non contournés.
         </p>
         <div className="toolbar">
           <input

@@ -1,17 +1,19 @@
 /**
  * Quality Gate — PASS / WARNING / BLOCKED
+ * Optional meta: freshness / live flags (never invent values).
  */
 
-export function evaluateQualityGate({ csvResult, features, ranked }) {
+export function evaluateQualityGate({ csvResult, features, ranked, meta = null }) {
   const checks = [];
 
   if (!csvResult || !csvResult.ok) {
-    checks.push({ id: 'source', status: 'BLOCKED', detail: 'Aucune source CSV valide' });
+    checks.push({ id: 'source', status: 'BLOCKED', detail: 'Aucune source valide' });
   } else {
+    const mode = meta?.mode || 'CSV';
     checks.push({
       id: 'source',
       status: 'PASS',
-      detail: `${csvResult.importedRows} lignes / ${csvResult.symbols.length} titres`,
+      detail: `${mode} — ${csvResult.importedRows} lignes / ${csvResult.symbols.length} titres`,
     });
   }
 
@@ -43,9 +45,34 @@ export function evaluateQualityGate({ csvResult, features, ranked }) {
     checks.push({ id: 'history', status: 'PASS', detail: `Historique minimal ${minObs} obs` });
   }
 
+  if (meta?.live) {
+    const fm = meta.freshnessMinutes;
+    if (fm == null) {
+      checks.push({ id: 'freshness', status: 'WARNING', detail: 'Fraîcheur LIVE inconnue' });
+    } else if (fm > 60) {
+      checks.push({ id: 'freshness', status: 'WARNING', detail: `Fraîcheur LIVE ${fm} min (> 60)` });
+    } else {
+      checks.push({ id: 'freshness', status: 'PASS', detail: `Fraîcheur LIVE ${fm} min` });
+    }
+  } else {
+    checks.push({
+      id: 'freshness',
+      status: 'PASS',
+      detail: meta?.mode === 'SAMPLE' ? 'SAMPLE — hors fraîcheur live' : 'Non-LIVE — fraîcheur N/A',
+    });
+  }
+
+  if (meta?.live === true && meta?.mode === 'SAMPLE') {
+    checks.push({
+      id: 'live_integrity',
+      status: 'BLOCKED',
+      detail: 'Incohérence : SAMPLE ne peut pas être LIVE',
+    });
+  }
+
   const rankedOk = (ranked || []).filter((r) => r.confidence >= 0.35).length;
   if (rankedOk === 0 && nFeat > 0) {
-    checks.push({ id: 'confidence', status: 'WARNING', detail: 'Aucune titre à confiance suffisante' });
+    checks.push({ id: 'confidence', status: 'WARNING', detail: 'Aucun titre à confiance suffisante' });
   } else if (nFeat > 0) {
     checks.push({ id: 'confidence', status: 'PASS', detail: `${rankedOk} titres exploitables` });
   }
