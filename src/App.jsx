@@ -14,7 +14,7 @@ import {
   refreshInternalHistoricalDb,
 } from './data/loadMarketData.js';
 import { loadBundledAnnualHistory } from './data/historical/HistoricalMarketData.js';
-import { getCompanyName } from './data/companyNames.js';
+import { getCompanyName, resolveSymbolInput } from './data/companyNames.js';
 import './App.css';
 
 const ChartsPanel = lazy(() => import('./components/ChartsPanel.jsx'));
@@ -578,10 +578,11 @@ export default function App() {
       <section className="panel" id="holdings-panel">
         <h2>Portefeuille déjà acheté</h2>
         <p className="muted small">
-          Saisissez les titres que vous détenez déjà (symbole BRVM, quantité, prix d’achat moyen
-          optionnel). La valorisation utilise le <b>cours le plus récent</b> disponible dans les
-          données, dans une fenêtre de <b>3 jours</b> autour de l’asOf (J-1) — jamais inventé. Au-delà
-          de 3 jours : prix N/D (périmé).
+          Saisissez le <b>ticker BRVM</b> (ex. <b>SNTS</b> pour Sonatel), la quantité, et le prix
+          d’achat moyen optionnel. Les alias connus (ex. SONATEL → SNTS) sont convertis
+          automatiquement. La valorisation utilise le <b>cours le plus récent</b> dans une fenêtre de{' '}
+          <b>3 jours</b> autour de l’asOf (J-1) — jamais inventé. Au-delà de 3 jours : prix N/D
+          (périmé).
         </p>
         <div className="table-scroll">
           <table className="holdings-input-table">
@@ -604,7 +605,18 @@ export default function App() {
                       onChange={(e) =>
                         setHoldingRows((rows) =>
                           rows.map((r) =>
-                            r.id === row.id ? { ...r, symbol: e.target.value.toUpperCase() } : r
+                            r.id === row.id
+                              ? { ...r, symbol: resolveSymbolInput(e.target.value) }
+                              : r
+                          )
+                        )
+                      }
+                      onBlur={(e) =>
+                        setHoldingRows((rows) =>
+                          rows.map((r) =>
+                            r.id === row.id
+                              ? { ...r, symbol: resolveSymbolInput(e.target.value) }
+                              : r
                           )
                         )
                       }

@@ -3,13 +3,13 @@
  * Market value uses the most recent close within ~3 days of asOf (J-1) — never invents prices.
  */
 
+import { resolveSymbolInput } from '../data/companyNames.js';
+
 export const MARKET_PRICE_MAX_AGE_DAYS = 3;
 
 export function normalizeHolding(raw) {
   if (!raw || typeof raw !== 'object') return null;
-  const symbol = String(raw.symbol || '')
-    .trim()
-    .toUpperCase();
+  const symbol = resolveSymbolInput(raw.symbol);
   const shares = Number(raw.shares);
   const avgCost = raw.avgCost === '' || raw.avgCost == null ? null : Number(raw.avgCost);
   if (!symbol || !Number.isFinite(shares) || shares <= 0) return null;
