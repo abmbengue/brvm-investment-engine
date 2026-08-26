@@ -14,6 +14,15 @@ export default function UserGuide({ open, onClose }) {
         </div>
         <div className="guide-body">
           <section>
+            <h3>0. Naviguer par onglets</h3>
+            <p>
+              L’app est découpée en onglets : <b>Paramètres</b> (capital, apports, holdings, exports),{' '}
+              <b>Données</b>, <b>Analyse</b> (predictor, allocation, stress, décisions),{' '}
+              <b>Simulation</b>, <b>Backtest</b>, <b>Audit</b>. Le bandeau et les métriques restent
+              visibles en haut.
+            </p>
+          </section>
+          <section>
             <h3>1. Choisir son profil</h3>
             <p>
               Prudent / Équilibré / Dynamique changent réserve de cash, nombre de lignes, score minimum et

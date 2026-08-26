@@ -16,7 +16,7 @@ import { loadBundledAnnualHistory } from './data/historical/HistoricalMarketData
 import { getCompanyName } from './data/companyNames.js';
 import './App.css';
 
-const VERSION = '7.5.1';
+const VERSION = '7.5.2';
 const SAMPLE_CSV_URL = `${import.meta.env.BASE_URL}sample-brvm.csv`;
 const ANNUAL_HISTORY_URL = `${import.meta.env.BASE_URL}data/BRVM_HISTORICAL_2006_2025_ANNUAL.csv`;
 const EMPTY_HOLDING = () => ({
@@ -25,6 +25,16 @@ const EMPTY_HOLDING = () => ({
   shares: '',
   avgCost: '',
 });
+
+/** Navigation principale — une section = un onglet */
+const TABS = [
+  { id: 'params', label: 'Paramètres' },
+  { id: 'data', label: 'Données' },
+  { id: 'analyse', label: 'Analyse' },
+  { id: 'simulation', label: 'Simulation' },
+  { id: 'backtest', label: 'Backtest' },
+  { id: 'audit', label: 'Audit' },
+];
 
 function pct(x) {
   if (x === null || x === undefined || Number.isNaN(x)) return '—';
@@ -87,6 +97,14 @@ export default function App() {
   const [holdingRows, setHoldingRows] = useState(initial.holdingRows);
   const [settingsSavedAt, setSettingsSavedAt] = useState(initial.updatedAt);
   const [guideOpen, setGuideOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem('brvm-active-tab');
+      return TABS.some((t) => t.id === saved) ? saved : 'analyse';
+    } catch {
+      return 'analyse';
+    }
+  });
   const [csvPreview, setCsvPreview] = useState(null);
   const [dataLoading, setDataLoading] = useState(false);
   const [csvResult, setCsvResult] = useState(null);
@@ -114,6 +132,14 @@ export default function App() {
     const saved = saveUserSettings({ capital, monthly, years, rate, profileId, holdingRows });
     setSettingsSavedAt(saved.updatedAt);
   }, [capital, monthly, years, rate, profileId, holdingRows]);
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('brvm-active-tab', activeTab);
+    } catch {
+      /* ignore */
+    }
+  }, [activeTab]);
 
   const applyProviderResult = useCallback((loaded) => {
     const compat = loaded.csvCompat;
@@ -296,6 +322,83 @@ export default function App() {
             {liveStatusMessage || result.liveStatusMessage}
           </span>
         </p>
+        <div className="toolbar hero-actions">
+          <button type="button" id="recalc" onClick={recalculate}>
+            RECALCULER
+          </button>
+          <button type="button" id="open-guide" onClick={() => setGuideOpen(true)}>
+            GUIDE
+          </button>
+          <button type="button" id="goto-params" onClick={() => setActiveTab('params')}>
+            PARAMÈTRES
+          </button>
+        </div>
+        <p className="small muted">
+          Naviguez par onglets. Spot, apports, holdings et exports → Paramètres.
+          {settingsSavedAt ? (
+            <>
+              {' '}
+              · Enregistrés : {new Date(settingsSavedAt).toLocaleString('fr-FR')}
+            </>
+          ) : null}
+          {dataLoading ? ' · Chargement données…' : ''}
+        </p>
+      </section>
+
+      <section className="metrics">
+        <div className="metric">
+          <small>Cash spot</small>
+          <div className="big" id="mcap">
+            {formatMoneyLabel(result.spotCash)}
+          </div>
+        </div>
+        <div className="metric">
+          <small>Apport mensuel</small>
+          <div className="big" id="mmonth">
+            {formatMoneyLabel(result.monthly)}
+          </div>
+        </div>
+        <div className="metric">
+          <small>Portefeuille détenu</small>
+          <div className="big" id="mhold">
+            {formatMoneyLabel(result.holdings?.marketValue || 0)}
+          </div>
+        </div>
+        <div className="metric">
+          <small>Patrimoine (spot + titres)</small>
+          <div className="big" id="mwealth">
+            {formatMoneyLabel(result.totalWealthNow)}
+          </div>
+        </div>
+        <div className="metric">
+          <small>Quality Gate</small>
+          <div className={`big ${gateClass(result.qualityGate.status)}`} id="mqg">
+            {result.qualityGate.status}
+          </div>
+        </div>
+      </section>
+
+      <nav className="tab-nav" role="tablist" aria-label="Sections de l’application">
+        {TABS.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            role="tab"
+            id={`tab-${tab.id}`}
+            aria-selected={activeTab === tab.id}
+            aria-controls={`panel-${tab.id}`}
+            className={`tab-btn${activeTab === tab.id ? ' active' : ''}`}
+            onClick={() => setActiveTab(tab.id)}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </nav>
+
+      {activeTab === 'params' && (
+      <div className="tab-panel" role="tabpanel" id="panel-params" aria-labelledby="tab-params">
+      <section className="panel" id="params-panel">
+        <h2>Paramètres de simulation</h2>
         <div className="toolbar">
           <MoneyInput
             id="capital"
@@ -348,12 +451,6 @@ export default function App() {
               ))}
             </select>
           </label>
-          <button type="button" id="recalc" onClick={recalculate}>
-            RECALCULER
-          </button>
-          <button type="button" id="open-guide" onClick={() => setGuideOpen(true)}>
-            GUIDE
-          </button>
           <button type="button" id="reset-settings" onClick={resetParams}>
             RÉINITIALISER MES PARAMÈTRES
           </button>
@@ -367,13 +464,6 @@ export default function App() {
         <p className="small muted">
           Spot = liquidités disponibles maintenant. Apport mensuel = versements futurs (simulation).
           Le portefeuille déjà acheté se saisit ci-dessous.
-          {settingsSavedAt ? (
-            <>
-              {' '}
-              · Paramètres enregistrés : {new Date(settingsSavedAt).toLocaleString('fr-FR')}
-            </>
-          ) : null}
-          {dataLoading ? ' · Chargement données…' : ''}
         </p>
         <div className="toolbar">
           <button type="button" id="export-decisions" onClick={() => exportKind('decisions')}>
@@ -385,39 +475,6 @@ export default function App() {
           <button type="button" id="export-portfolio" onClick={() => exportKind('portfolio')}>
             Portefeuille CSV
           </button>
-        </div>
-      </section>
-
-      <section className="metrics">
-        <div className="metric">
-          <small>Cash spot</small>
-          <div className="big" id="mcap">
-            {formatMoneyLabel(result.spotCash)}
-          </div>
-        </div>
-        <div className="metric">
-          <small>Apport mensuel</small>
-          <div className="big" id="mmonth">
-            {formatMoneyLabel(result.monthly)}
-          </div>
-        </div>
-        <div className="metric">
-          <small>Portefeuille détenu</small>
-          <div className="big" id="mhold">
-            {formatMoneyLabel(result.holdings?.marketValue || 0)}
-          </div>
-        </div>
-        <div className="metric">
-          <small>Patrimoine (spot + titres)</small>
-          <div className="big" id="mwealth">
-            {formatMoneyLabel(result.totalWealthNow)}
-          </div>
-        </div>
-        <div className="metric">
-          <small>Quality Gate</small>
-          <div className={`big ${gateClass(result.qualityGate.status)}`} id="mqg">
-            {result.qualityGate.status}
-          </div>
         </div>
       </section>
 
@@ -546,6 +603,11 @@ export default function App() {
         )}
       </section>
 
+      </div>
+      )}
+
+      {activeTab === 'data' && (
+      <div className="tab-panel" role="tabpanel" id="panel-data" aria-labelledby="tab-data">
       <section className="panel">
         <h2>Chaîne maître</h2>
         <div className="flow">
@@ -655,60 +717,66 @@ export default function App() {
         )}
       </section>
 
-      <section className="panel">
-        <h2>Simulation patrimoniale</h2>
+      <section className="panel" id="annual-history-panel">
+        <h2>Historique annuel BRVM Composite (2006–2025)</h2>
         <p className="muted small">
-          Scénarios = hypothèses de simulation, jamais une garantie. Gain estimé = valeur projetée −
-          capital versé.
+          Série <b>PRICE_INDEX</b> annuelle — pas TOTAL RETURN, pas LIVE, pas prix de titres. Qualité
+          affichée : VERIFIED / SECONDARY / MISSING. Aucune donnée manquante inventée.
         </p>
-        <div className="metrics mini">
-          <div className="metric">
-            <small>Capital versé</small>
-            <div className="big" id="mcontrib">
-              {formatMoneyLabel(result.contributed)}
+        {result.historicalMarketData?.ok ? (
+          <>
+            <p className="small">
+              {result.historicalMarketData.yearCount} années ·{' '}
+              {result.historicalMarketData.yearStart}–{result.historicalMarketData.yearEnd} · VERIFIED{' '}
+              {result.historicalMarketData.qualityCounts?.VERIFIED ?? 0} · SECONDARY{' '}
+              {result.historicalMarketData.qualityCounts?.SECONDARY ?? 0} · MISSING{' '}
+              {result.historicalMarketData.qualityCounts?.MISSING ?? 0}
+            </p>
+            <p className="yellow small">
+              <b>{result.historicalMarketData.stockBacktestMessage}</b>
+            </p>
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Année</th>
+                    <th>Indice fin d’année</th>
+                    <th>Rendement</th>
+                    <th>Régime</th>
+                    <th>Qualité</th>
+                    <th>Source rendement</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(result.historicalMarketData.benchmark || []).map((b) => {
+                    const regime = (result.historicalMarketData.regimes || []).find(
+                      (r) => r.year === b.year
+                    );
+                    return (
+                      <tr key={b.year}>
+                        <td>{b.year}</td>
+                        <td>{b.indexYearEnd != null ? b.indexYearEnd.toFixed(2) : '—'}</td>
+                        <td>{pct(b.annualReturn)}</td>
+                        <td>{regime?.regime || '—'}</td>
+                        <td className={qualityClass(b.quality)}>{b.quality}</td>
+                        <td className="small muted">{b.returnSource || '—'}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
-          </div>
-          <div className="metric">
-            <small>Valeur finale centrale (cash spot + apports)</small>
-            <div className="big" id="mfv">
-              {formatMoneyLabel(result.finalValue)}
-            </div>
-          </div>
-          <div className="metric">
-            <small>Gain estimé</small>
-            <div className={`big ${result.gain >= 0 ? 'green' : 'red'}`} id="mgain">
-              {formatMoneyLabel(result.gain)}
-            </div>
-          </div>
-        </div>
-        <div className="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>Horizon</th>
-                <th>Capital versé</th>
-                <th>Prudent (5%)</th>
-                <th>Central</th>
-                <th>Dynamique (12%)</th>
-                <th>Gain (central)</th>
-              </tr>
-            </thead>
-            <tbody id="proj">
-              {result.projections.map((p) => (
-                <tr key={p.years}>
-                  <td>{p.years} ans</td>
-                  <td>{formatMoneyLabel(p.contributed)}</td>
-                  <td>{formatMoneyLabel(p.prudent)}</td>
-                  <td>{formatMoneyLabel(p.central)}</td>
-                  <td>{formatMoneyLabel(p.dynamic)}</td>
-                  <td>{formatMoneyLabel(p.gainCentral)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+          </>
+        ) : (
+          <p className="yellow">Historique annuel d’indice non chargé.</p>
+        )}
       </section>
 
+      </div>
+      )}
+
+      {activeTab === 'analyse' && (
+      <div className="tab-panel" role="tabpanel" id="panel-analyse" aria-labelledby="tab-analyse">
       <section className="grid">
         <div className="panel">
           <h2>Predictor</h2>
@@ -983,6 +1051,70 @@ export default function App() {
         </div>
       </section>
 
+      </div>
+      )}
+
+      {activeTab === 'simulation' && (
+      <div className="tab-panel" role="tabpanel" id="panel-simulation" aria-labelledby="tab-simulation">
+      <section className="panel">
+        <h2>Simulation patrimoniale</h2>
+        <p className="muted small">
+          Scénarios = hypothèses de simulation, jamais une garantie. Gain estimé = valeur projetée −
+          capital versé.
+        </p>
+        <div className="metrics mini">
+          <div className="metric">
+            <small>Capital versé</small>
+            <div className="big" id="mcontrib">
+              {formatMoneyLabel(result.contributed)}
+            </div>
+          </div>
+          <div className="metric">
+            <small>Valeur finale centrale (cash spot + apports)</small>
+            <div className="big" id="mfv">
+              {formatMoneyLabel(result.finalValue)}
+            </div>
+          </div>
+          <div className="metric">
+            <small>Gain estimé</small>
+            <div className={`big ${result.gain >= 0 ? 'green' : 'red'}`} id="mgain">
+              {formatMoneyLabel(result.gain)}
+            </div>
+          </div>
+        </div>
+        <div className="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Horizon</th>
+                <th>Capital versé</th>
+                <th>Prudent (5%)</th>
+                <th>Central</th>
+                <th>Dynamique (12%)</th>
+                <th>Gain (central)</th>
+              </tr>
+            </thead>
+            <tbody id="proj">
+              {result.projections.map((p) => (
+                <tr key={p.years}>
+                  <td>{p.years} ans</td>
+                  <td>{formatMoneyLabel(p.contributed)}</td>
+                  <td>{formatMoneyLabel(p.prudent)}</td>
+                  <td>{formatMoneyLabel(p.central)}</td>
+                  <td>{formatMoneyLabel(p.dynamic)}</td>
+                  <td>{formatMoneyLabel(p.gainCentral)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      </div>
+      )}
+
+      {activeTab === 'backtest' && (
+      <div className="tab-panel" role="tabpanel" id="panel-backtest" aria-labelledby="tab-backtest">
       <section className="panel">
         <h2>Backtest (TRAIN → VALIDATION → OUT-OF-SAMPLE)</h2>
         <p className="yellow">
@@ -1081,61 +1213,11 @@ export default function App() {
         )}
       </section>
 
-      <section className="panel" id="annual-history-panel">
-        <h2>Historique annuel BRVM Composite (2006–2025)</h2>
-        <p className="muted small">
-          Série <b>PRICE_INDEX</b> annuelle — pas TOTAL RETURN, pas LIVE, pas prix de titres. Qualité
-          affichée : VERIFIED / SECONDARY / MISSING. Aucune donnée manquante inventée.
-        </p>
-        {result.historicalMarketData?.ok ? (
-          <>
-            <p className="small">
-              {result.historicalMarketData.yearCount} années ·{' '}
-              {result.historicalMarketData.yearStart}–{result.historicalMarketData.yearEnd} · VERIFIED{' '}
-              {result.historicalMarketData.qualityCounts?.VERIFIED ?? 0} · SECONDARY{' '}
-              {result.historicalMarketData.qualityCounts?.SECONDARY ?? 0} · MISSING{' '}
-              {result.historicalMarketData.qualityCounts?.MISSING ?? 0}
-            </p>
-            <p className="yellow small">
-              <b>{result.historicalMarketData.stockBacktestMessage}</b>
-            </p>
-            <div className="table-scroll">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Année</th>
-                    <th>Indice fin d’année</th>
-                    <th>Rendement</th>
-                    <th>Régime</th>
-                    <th>Qualité</th>
-                    <th>Source rendement</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(result.historicalMarketData.benchmark || []).map((b) => {
-                    const regime = (result.historicalMarketData.regimes || []).find(
-                      (r) => r.year === b.year
-                    );
-                    return (
-                      <tr key={b.year}>
-                        <td>{b.year}</td>
-                        <td>{b.indexYearEnd != null ? b.indexYearEnd.toFixed(2) : '—'}</td>
-                        <td>{pct(b.annualReturn)}</td>
-                        <td>{regime?.regime || '—'}</td>
-                        <td className={qualityClass(b.quality)}>{b.quality}</td>
-                        <td className="small muted">{b.returnSource || '—'}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </>
-        ) : (
-          <p className="yellow">Historique annuel d’indice non chargé.</p>
-        )}
-      </section>
+      </div>
+      )}
 
+      {activeTab === 'audit' && (
+      <div className="tab-panel" role="tabpanel" id="panel-audit" aria-labelledby="tab-audit">
       <section className="panel">
         <h2>Audit / risques / Quality Gate</h2>
         <div className="table-scroll">
@@ -1196,6 +1278,8 @@ export default function App() {
           </p>
         </div>
       </section>
+      </div>
+      )}
     </main>
   );
 }

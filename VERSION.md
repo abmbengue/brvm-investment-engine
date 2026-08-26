@@ -1,7 +1,13 @@
 # VERSION.md
 
-- **Version** : 7.5.1
+- **Version** : 7.5.2
 - **Date** : 2026-08-26
+
+## 7.5.2
+
+- Navigation par onglets : Paramètres, Données, Analyse, Simulation, Backtest, Audit
+- En-tête allégé (statut + RECALCULER / GUIDE) ; métriques toujours visibles
+- Onglet actif mémorisé en session
 
 ## 7.5.1
 
