@@ -72,7 +72,6 @@ describe('illustrationSeries', () => {
     expect(ticks.length).toBeLessThanOrEqual(9);
     expect(buildYearTicks(2026, 2026)).toEqual([2026]);
   });
-});
 
   it('allocation and decision pies', () => {
     expect(
